@@ -1,0 +1,26 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+**/*.rs.old
+**/*.rs.tmp
+
+# Cargo package files
+Cargo.lock
+
+# IDE / Editor
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
