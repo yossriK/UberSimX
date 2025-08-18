@@ -6,6 +6,7 @@ pub struct Driver {
     pub name: String,
     pub license_number: String,
     pub rating: f32,
+    pub(crate) car_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]

@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.99"
+axum = "0.8.4"
 chrono = "0.4.41"
-uuid = "1.18.0"
+serde = { version = "1.0.219", features = ["derive"] }
+uuid = { version = "1", features = ["serde"] }

@@ -11,6 +11,11 @@ pub mod repository {
     // DriverStatus could be peristed, but for simulation in memroy is fine.  
 }
 
+pub mod api {
+    pub mod driver;
+    pub mod router;
+}
+
 fn main() {
     println!("Hello, world!");
 }
