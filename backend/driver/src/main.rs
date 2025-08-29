@@ -4,6 +4,7 @@ pub mod repository {
     pub mod driver_repository;
     pub mod vehicle_repository;
     // DriverLocation usually not persisted in a database for high frequency updates. will be in memrory or cache
+     // PostgreSQL + PostGIS extension OR Redis + Geo commands
     
     // DriverAvailabilityEvent don't need to be stored in a database, they are transient messages, that exist as events 
     // in the messaging system

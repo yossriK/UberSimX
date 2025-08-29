@@ -4,9 +4,9 @@ use uuid::Uuid;
 pub struct Driver {
     pub id: Uuid,
     pub name: String,
-    pub license_number: String,
-    pub rating: f32,
-    pub(crate) car_id: Option<Uuid>,
+    pub license_number: Option<String>, // might not be known at time of creation
+    pub rating: Option<f32>, // not known at time of creation
+    pub car_id: Option<Uuid>, // might not be assigned at creation
 }
 
 #[derive(Debug, Clone)]

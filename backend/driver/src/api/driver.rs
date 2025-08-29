@@ -2,10 +2,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
-
-
-
-
 use axum::{
     extract::{Path, State},
     Json,
@@ -14,7 +10,6 @@ use axum::{
 
 use crate::repository::driver_repository::DriverRepository;
 use crate::models::Driver;
-use super::{CreateDriverRequest, DriverResponse};
 use std::sync::Arc;
 
 
@@ -39,6 +34,8 @@ pub async fn create_driver<R: DriverRepository>(
         id: Uuid::new_v4(),
         name: payload.name,
         car_id: payload.car_id,
+        license_number: None,
+        rating: None,
     };
 
     repo.create_driver(&driver).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
