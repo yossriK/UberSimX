@@ -10,4 +10,4 @@ chrono = "0.4.38"
 serde = { version = "1.0.197", features = ["derive"] }
 tokio = { version = "1.37.0", features = ["full"] }
 uuid = { version = "1.8.0", features = ["v4", "serde"] }
-sqlx = { version = "0.7.4", features = ["runtime-tokio", "postgres", "macros"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "macros"] }
