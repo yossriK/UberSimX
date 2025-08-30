@@ -8,8 +8,10 @@ use axum::{
     http::StatusCode,
 };
 
+use crate::api::router::AppState;
 use crate::repository::driver_repository::DriverRepository;
 use crate::models::Driver;
+use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
 
 
@@ -26,10 +28,16 @@ pub struct DriverResponse {
     pub car_id: Option<Uuid>,
 }
 
-pub async fn create_driver<R: DriverRepository>(
-    State(repo): State<Arc<R>>,
+pub async fn create_driver<D, C>(
+    State(state): State<AppState<D, C>>,
     Json(payload): Json<CreateDriverRequest>,
-) -> Result<Json<DriverResponse>, StatusCode> {
+) -> Result<Json<DriverResponse>, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: VehicleRepository + Send + Sync + Clone + 'static,
+{
+        let repo = state.driver_repo.clone();
+
     let driver = Driver {
         id: Uuid::new_v4(),
         name: payload.name,
