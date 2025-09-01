@@ -1,0 +1,17 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# VS Code
+.vscode/
+
+# Other common ignores
+*.log
+*.tmp
+*.swp
+.DS_Store
+.idea/
+
+# By default, ignore node_modules if present
+node_modules/

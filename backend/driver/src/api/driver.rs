@@ -1,19 +1,21 @@
 use serde::Deserialize;
 use serde::Serialize;
+use ubersimx_messaging::messagingclient;
+use ubersimx_messaging::messagingclient::MessagingClient;
+use ubersimx_messaging::Messaging;
 use uuid::Uuid;
 
 use axum::{
     extract::{Path, State},
-    Json,
     http::StatusCode,
+    Json,
 };
 
 use crate::api::router::AppState;
-use crate::repository::driver_repository::DriverRepository;
 use crate::models::Driver;
+use crate::repository::driver_repository::DriverRepository;
 use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
-
 
 #[derive(Deserialize)]
 pub struct CreateDriverRequest {
@@ -36,7 +38,7 @@ where
     D: DriverRepository + Send + Sync + Clone + 'static,
     C: VehicleRepository + Send + Sync + Clone + 'static,
 {
-        let repo = state.driver_repo.clone();
+    let repo = state.driver_repo.clone();
 
     let driver = Driver {
         id: Uuid::new_v4(),
@@ -46,7 +48,19 @@ where
         rating: None,
     };
 
-    repo.create_driver(&driver).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    repo.create_driver(&driver)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // for the fun of it let me hook the publisher and just publish for fun and see if itll be received.
+    state
+        .messaging_client
+        .publish(
+            String::from("driver.signup"),
+            "Ride started".as_bytes().to_vec(),
+        )
+        .await
+        .unwrap();
 
     Ok(Json(DriverResponse {
         id: driver.id,
@@ -73,9 +87,17 @@ pub async fn get_driver<R: DriverRepository>(
 pub async fn list_drivers<R: DriverRepository>(
     State(repo): State<Arc<R>>,
 ) -> Result<Json<Vec<DriverResponse>>, StatusCode> {
-    let drivers = repo.list_drivers().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let resp: Vec<DriverResponse> = drivers.into_iter()
-        .map(|d| DriverResponse { id: d.id, name: d.name, car_id: d.car_id })
+    let drivers = repo
+        .list_drivers()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let resp: Vec<DriverResponse> = drivers
+        .into_iter()
+        .map(|d| DriverResponse {
+            id: d.id,
+            name: d.name,
+            car_id: d.car_id,
+        })
         .collect();
     Ok(Json(resp))
 }
