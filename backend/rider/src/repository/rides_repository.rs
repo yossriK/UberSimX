@@ -152,38 +152,19 @@ impl RidesRepository {
         &self,
         ride_id: Uuid,
         status: String,
-    ) -> Result<Option<Ride>, sqlx::Error> {
-        let row = sqlx::query_as::<_, (Uuid, Uuid, f64, f64, f64, f64, String, Option<Uuid>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
             r#"
             UPDATE rides 
             SET status = $2, updated_at = NOW()
             WHERE id = $1
-            RETURNING id, rider_id, origin_lat, origin_lng, destination_lat, destination_lng, status,
-                      driver_id, match_time, pickup_time, dropoff_time, created_at, updated_at
             "#
         )
         .bind(ride_id)
         .bind(status)
-        .fetch_optional(&self.pool)
+        .execute(&self.pool)
         .await?;
 
-        match row {
-            Some(row) => Ok(Some(Ride {
-                id: row.0,
-                rider_id: row.1,
-                origin_lat: row.2,
-                origin_lng: row.3,
-                destination_lat: row.4,
-                destination_lng: row.5,
-                status: row.6,
-                driver_id: row.7,
-                match_time: row.8,
-                pickup_time: row.9,
-                dropoff_time: row.10,
-                created_at: row.11,
-                updated_at: row.12,
-            })),
-            None => Ok(None),
-        }
+        Ok(())
     }
 }
