@@ -44,7 +44,7 @@ async fn create_rider(
 
 #[derive(Deserialize)]
 struct RequestRide {
-    user_id: Uuid,
+    rider_id: Uuid,
     pickup: String,
     dropoff: String,
 }
@@ -54,7 +54,7 @@ async fn request_ride(
     Json(payload): Json<RequestRide>,
 ) -> Json<RideRequest> {
     let ride = RideRequest {
-        user_id: payload.user_id,
+        user_id: payload.rider_id,
         pickup: payload.pickup,
         dropoff: payload.dropoff,
     };
