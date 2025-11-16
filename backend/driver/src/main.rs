@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     let driver_repo = Arc::new(PgDriverRepository::new(pool.clone()));
     let vehicle_repo = Arc::new(PgVehicleRepository::new(pool.clone()));
 
-          // Connect to your messaging service
+    // Connect to your messaging service
     let client = Arc::new(MessagingClient::connect("localhost:4222").await.unwrap());
 
     // can also have factory function to create AppState that takes pool and creates repos inside

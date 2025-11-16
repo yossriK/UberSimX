@@ -1,65 +1,58 @@
+use crate::models::{CreateRideRequest, CreateRiderRequest, Ride, Rider};
+use crate::repository::riders_repository::RidersRepository;
+use crate::repository::rides_repository::RidesRepository;
 use axum::{routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Rider {
-    pub id: Uuid,
-    pub name: String,
-    pub email: String,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct RideRequest {
-    pub user_id: Uuid,
-    pub pickup: String,
-    pub dropoff: String,
-}
-
 pub struct AppState {
-    pub riders: Mutex<HashMap<Uuid, Rider>>,
-    pub rides: Mutex<Vec<RideRequest>>,
+    pub riders_repo: Arc<RidersRepository>,
+    pub rides_repo: Arc<RidesRepository>,
 }
 
 #[derive(Deserialize)]
-struct CreateUser {
+struct CreateRider {
     name: String,
-    email: String,
 }
 
 async fn create_rider(
     state: axum::extract::State<Arc<AppState>>,
-    Json(payload): Json<CreateUser>,
-) -> Json<Rider> {
-    let rider = Rider {
-        id: Uuid::new_v4(),
-        name: payload.name,
-        email: payload.email,
-    };
-    state.riders.lock().unwrap().insert(rider.id, rider.clone());
-    Json(rider)
+    Json(payload): Json<CreateRider>,
+) -> Result<Json<Rider>, axum::http::StatusCode> {
+    let request = CreateRiderRequest { name: payload.name };
+
+    match state.riders_repo.create_rider(request).await {
+        Ok(rider) => Ok(Json(rider)),
+        Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 #[derive(Deserialize)]
 struct RequestRide {
     rider_id: Uuid,
-    pickup: String,
-    dropoff: String,
+    origin_lat: f64,
+    origin_lng: f64,
+    destination_lat: f64,
+    destination_lng: f64,
 }
 
 async fn request_ride(
     state: axum::extract::State<Arc<AppState>>,
     Json(payload): Json<RequestRide>,
-) -> Json<RideRequest> {
-    let ride = RideRequest {
-        user_id: payload.rider_id,
-        pickup: payload.pickup,
-        dropoff: payload.dropoff,
+) -> Result<Json<Ride>, axum::http::StatusCode> {
+    let request = CreateRideRequest {
+        rider_id: payload.rider_id,
+        origin_lat: payload.origin_lat,
+        origin_lng: payload.origin_lng,
+        destination_lat: payload.destination_lat,
+        destination_lng: payload.destination_lng,
     };
-    state.rides.lock().unwrap().push(ride.clone());
-    Json(ride)
+
+    match state.rides_repo.create_ride(request).await {
+        Ok(ride) => Ok(Json(ride)),
+        Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 use axum::extract::Path;
@@ -69,11 +62,10 @@ async fn get_rider(
     state: axum::extract::State<Arc<AppState>>,
     Path(rider_id): Path<Uuid>,
 ) -> Result<Json<Rider>, StatusCode> {
-    let riders = state.riders.lock().unwrap();
-    if let Some(rider) = riders.get(&rider_id) {
-        Ok(Json(rider.clone()))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    match state.riders_repo.get_rider_by_id(rider_id).await {
+        Ok(Some(rider)) => Ok(Json(rider)),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 

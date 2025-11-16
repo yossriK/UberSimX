@@ -17,6 +17,9 @@ pub trait DriverRepository {
 }
 
 // Struct that holds the database pool
+// PgPool is a connection pool that manages reusable PostgreSQL connections for efficiency.
+// It handles connection lifecycle, limits concurrent connections, and is thread-safe.
+// Arc<PgPool> allows sharing the pool across multiple async tasks and threads.
 #[derive(Clone)]
 pub struct PgDriverRepository {
     pub pool: Arc<PgPool>,
@@ -31,27 +34,25 @@ impl PgDriverRepository {
 #[async_trait]
 impl DriverRepository for PgDriverRepository {
     async fn create_driver(&self, driver: &Driver) -> Result<(), Error> {
-      let id = Uuid::new_v4();
+        let id = Uuid::new_v4();
 
-    sqlx::query(
-        "INSERT INTO drivers (id, name, license_number, rating, car_id)
-         VALUES ($1, $2, $3, $4, $5)"
-    )
-    .bind(id) // $1 → id
-    .bind(&driver.name) // $2 → name
-    .bind(driver.license_number.as_ref()) // $3 → license_number
-    .bind(driver.rating) // $4 → rating
-    .bind(driver.car_id) // $5 → car_id
-    .execute(self.pool.as_ref())
-    .await?;
-    
-    
-    Ok(())
-        
+        sqlx::query(
+            "INSERT INTO drivers (id, name, license_number, rating, car_id)
+         VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(id) // $1 → id
+        .bind(&driver.name) // $2 → name
+        .bind(driver.license_number.as_ref()) // $3 → license_number
+        .bind(driver.rating) // $4 → rating
+        .bind(driver.car_id) // $5 → car_id
+        .execute(self.pool.as_ref())
+        .await?;
+
+        Ok(())
     }
 
     async fn get_driver(&self, id: Uuid) -> anyhow::Result<Option<Driver>> {
-      todo!()
+        todo!()
     }
 
     async fn list_drivers(&self) -> anyhow::Result<Vec<Driver>> {
@@ -65,8 +66,7 @@ impl DriverRepository for PgDriverRepository {
         // .fetch_all(self.pool.as_ref())
         // .await?;
         // Ok(recs)
-                todo!()
-
+        todo!()
     }
 
     async fn update_driver(&self, driver: &Driver) -> anyhow::Result<()> {
