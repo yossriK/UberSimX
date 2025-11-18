@@ -1,9 +1,9 @@
 use anyhow::Result;
+use futures_util::stream::StreamExt;
 use sqlx::postgres::PgPoolOptions;
+use std::{env, sync::Arc};
 use tokio::task;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
-use std::{env, sync::Arc};
-use futures_util::stream::StreamExt;
 
 use crate::{
     api::router::{create_router, AppState},
@@ -36,6 +36,13 @@ async fn main() -> Result<()> {
     let database_url = env::var("DATABASE_URL")
         .map_err(|e| anyhow::anyhow!("DATABASE_URL must be set in .env: {}", e))?;
 
+    let messaging_url = env::var("MESSAGING_URL")
+        .map_err(|e| anyhow::anyhow!("MESSAGING_URL must be set in .env: {}", e))?;
+
+    let server_address =
+        env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+
+    // Create a connection pool
     let pool = Arc::new(
         PgPoolOptions::new()
             .max_connections(5)
@@ -46,34 +53,52 @@ async fn main() -> Result<()> {
     let driver_repo = Arc::new(PgDriverRepository::new(pool.clone()));
     let vehicle_repo = Arc::new(PgVehicleRepository::new(pool.clone()));
 
-          // Connect to your messaging service
-    let client = Arc::new(MessagingClient::connect("localhost:4222").await.unwrap());
+    // Connect to your messaging service
+    let client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
 
     // can also have factory function to create AppState that takes pool and creates repos inside
-        let state = AppState {
+    let state = AppState {
         driver_repo,
         vehicle_repo,
         messaging_client: client.clone(),
     };
     let app = create_router(state);
 
-
-
-
-    // Spawn a Tokio task to subscribe to "events.ride"
+    // Spawn a Tokio task to subscribe to "driver.signup"
     let handle = task::spawn(async move {
-        let mut subscription = client.subscribe(String::from("driver.signup")).await.unwrap();
+        let mut subscription = client
+            .subscribe(String::from("driver.signup"))
+            .await
+            .unwrap();
         while let Some(msg) = subscription.next().await {
-            println!("Received: {:?}", std::str::from_utf8(&msg.unwrap().data).unwrap());
+            println!(
+                "Received: {:?}",
+                std::str::from_utf8(&msg.unwrap().data).unwrap()
+            );
         }
     });
 
     // Start server
-     // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&server_address).await?;
 
-
+    // Run both the server and message handler concurrently using tokio::select!
+    // This ensures both tasks run simultaneously and we can detect failures in either:
+    // - If the HTTP server crashes, we'll know about it
+    // - If the message subscription task panics, we'll catch it
+    // Without select!, axum::serve() would block forever and we'd never await the handle,
+    // causing silent failures in the message handler that we couldn't detect or recover from
+    tokio::select! {
+        result = axum::serve(listener, app) => {
+            if let Err(e) = result {
+                eprintln!("Server error: {}", e);
+            }
+        }
+        result = handle => {
+            if let Err(e) = result {
+                eprintln!("Message handler error: {}", e);
+            }
+        }
+    }
 
     Ok(())
 }
