@@ -13,3 +13,4 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uui
 chrono = { version = "0.4.42", features = ["serde"] }
 dotenvy = "0.15.7"
 anyhow = "1.0.100"
+ubersimx-messaging = { path = "../ubersimx-messaging" }
