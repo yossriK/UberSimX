@@ -2,13 +2,16 @@ use crate::models::{CreateRideRequest, CreateRiderRequest, Ride, Rider};
 use crate::repository::riders_repository::RidersRepository;
 use crate::repository::rides_repository::RidesRepository;
 use axum::{routing::post, Json, Router};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use std::sync::Arc;
+use ubersimx_messaging::messagingclient::MessagingClient;
+use ubersimx_messaging::Messaging;
 use uuid::Uuid;
 
 pub struct AppState {
     pub riders_repo: Arc<RidersRepository>,
     pub rides_repo: Arc<RidesRepository>,
+    pub messaging_client: Arc<MessagingClient>,
 }
 
 #[derive(Deserialize)]
@@ -49,8 +52,32 @@ async fn request_ride(
         destination_lng: payload.destination_lng,
     };
 
+    // You should send the event after calling the repository, for these important reasons:
+    // Data consistency - Only send events for rides that were successfully persisted to the database
+    // Reliability - If the database operation fails, you don't want to send misleading events
+    // Event ordering - Events should reflect the actual state changes that occurred
+    // Error handling - You can handle database errors without worrying about "orphaned" events
+
     match state.rides_repo.create_ride(request).await {
-        Ok(ride) => Ok(Json(ride)),
+        Ok(ride) => {
+            // 2. Then, send event (with the actual ride data including generated ID)
+            let ride_data = serde_json::to_vec(&ride).unwrap_or_default();
+            if let Err(_) = state
+                .messaging_client
+                .publish(String::from("ride.requested"), ride_data)
+                .await
+            {
+                // todo: proper clean up, like delete the db transaction or retry logic could be implemented here
+
+                // Log the error but don't fail the request since ride is already created
+
+                eprintln!("Failed to send ride requested event");
+                return Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+            }
+
+            Ok(Json(ride))
+        }
+
         Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
     }
 }

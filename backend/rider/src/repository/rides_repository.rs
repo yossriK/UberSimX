@@ -1,8 +1,9 @@
 use crate::models::{CreateRideRequest, Ride};
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 pub struct RidesRepository {
+    // SQLx PgPool is already Arc-like internally - PgPool itself is a connection pool that's designed to be cloned cheaply and shared across threads. It's essentially a smart pointer to the underlying pool.
     pool: PgPool,
 }
 
@@ -158,7 +159,7 @@ impl RidesRepository {
             UPDATE rides 
             SET status = $2, updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(ride_id)
         .bind(status)

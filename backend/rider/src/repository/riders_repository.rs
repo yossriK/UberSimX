@@ -1,5 +1,5 @@
 use crate::models::{CreateRiderRequest, Rider};
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 pub struct RidersRepository {
