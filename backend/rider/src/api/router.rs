@@ -2,7 +2,8 @@ use crate::models::{CreateRideRequest, CreateRiderRequest, Ride, Rider};
 use crate::repository::riders_repository::RidersRepository;
 use crate::repository::rides_repository::RidesRepository;
 use axum::{routing::post, Json, Router};
-use serde::{Deserialize};
+use chrono::Utc;
+use serde::Deserialize;
 use std::sync::Arc;
 use ubersimx_messaging::messagingclient::MessagingClient;
 use ubersimx_messaging::Messaging;
@@ -43,13 +44,15 @@ struct RequestRide {
 async fn request_ride(
     state: axum::extract::State<Arc<AppState>>,
     Json(payload): Json<RequestRide>,
-) -> Result<Json<Ride>, axum::http::StatusCode> {
+) -> Result<(), axum::http::StatusCode> {
     let request = CreateRideRequest {
+        ride_id: Uuid::new_v4(),
         rider_id: payload.rider_id,
         origin_lat: payload.origin_lat,
         origin_lng: payload.origin_lng,
         destination_lat: payload.destination_lat,
         destination_lng: payload.destination_lng,
+        created_at: Utc::now(),
     };
 
     // You should send the event after calling the repository, for these important reasons:
@@ -58,13 +61,13 @@ async fn request_ride(
     // Event ordering - Events should reflect the actual state changes that occurred
     // Error handling - You can handle database errors without worrying about "orphaned" events
 
-    match state.rides_repo.create_ride(request).await {
-        Ok(ride) => {
+    match state.rides_repo.create_ride(request.clone()).await {
+        Ok(_) => {
             // 2. Then, send event (with the actual ride data including generated ID)
-            let ride_data = serde_json::to_vec(&ride).unwrap_or_default();
+            let ride_request_data = serde_json::to_vec(&request).unwrap_or_default();
             if let Err(_) = state
                 .messaging_client
-                .publish(String::from("ride.requested"), ride_data)
+                .publish(String::from("ride.requested"), ride_request_data)
                 .await
             {
                 // todo: proper clean up, like delete the db transaction or retry logic could be implemented here
@@ -75,7 +78,7 @@ async fn request_ride(
                 return Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
             }
 
-            Ok(Json(ride))
+            Ok(())
         }
 
         Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),

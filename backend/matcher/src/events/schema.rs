@@ -1,14 +1,18 @@
 use serde::Deserialize;
 use serde::Serialize;
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
 // defines all event types (RideRequested, DriverLocationUpdated, etc.)
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RideRequested {
-    pub ride_id: String,
-    pub rider_id: String,
-    pub origin: (f64, f64),
-    pub dest: (f64, f64),
-    pub ts: i64,
+    pub ride_id: Uuid,
+    pub rider_id: Uuid,
+    pub origin_lat: f64,
+    pub origin_lng: f64,
+    pub destination_lat: f64,
+    pub destination_lng: f64,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

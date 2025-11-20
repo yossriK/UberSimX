@@ -4,7 +4,9 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::events::{producers::EventProducer, schema::RideRequested};
 
@@ -19,11 +21,21 @@ struct DriverState {
 
 #[derive(Debug, Clone)]
 struct RiderState {
-    ride_id: String,
-    rider_id: String,
-    lat: f64,
-    lon: f64,
-    dest: (f64, f64),
+    ride_id: Uuid,
+    rider_id: Uuid,
+    pub origin_lat: f64,
+    pub origin_lng: f64,
+    pub destination_lat: f64,
+    pub destination_lng: f64,
+    pub created_at: DateTime<Utc>,
+    pub status: RideStatus,
+}
+
+#[derive(Debug, Clone)]
+enum RideStatus {
+    Pending,
+    Matched,
+    Expired
 }
 
 /// Core Matcher service
@@ -45,20 +57,20 @@ impl MatcherService {
     }
 
     pub async fn handle_ride_requested(&self, event: RideRequested) {
-        // store rider state
+        // store rider state. After Rider has been matched with driver, we can either remove from db or update status to matched. 
+        // the latter might be useful for analytics later, pretain history of rides etc (soft delete)
         let rider_state = RiderState {
             ride_id: event.ride_id.clone(),
             rider_id: event.rider_id.clone(),
-            dest: event.dest,
-            lat: event.origin.0,
-            lon: event.origin.1,
+            origin_lat: event.origin_lat,
+            origin_lng: event.origin_lng,
+            destination_lat: event.destination_lat,
+            destination_lng: event.destination_lng,
+            created_at: event.created_at,
+            status: RideStatus::Pending,
         };
 
-        // Store rider temporarily
-        {
-            let mut riders = self.riders.write().await;
-            riders.insert(rider_state.ride_id.clone(), rider_state.clone());
-        }
+        // add db connection here and store in db
 
         // todo: so what do I do here? find nearby drivers? emit another event? score them, propose match
 
