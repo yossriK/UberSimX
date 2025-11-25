@@ -12,41 +12,24 @@ impl RidesRepository {
         Self { pool }
     }
 
-    pub async fn create_ride(&self, request: CreateRideRequest) -> Result<Ride, sqlx::Error> {
-        let ride_id = Uuid::new_v4();
-
-        let row = sqlx::query_as::<_, (Uuid, Uuid, f64, f64, f64, f64, String, Option<Uuid>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
+    pub async fn create_ride(&self, request: CreateRideRequest) -> Result<(), sqlx::Error> {
+        sqlx::query(
             r#"
-            INSERT INTO rides (id, rider_id, origin_lat, origin_lng, destination_lat, destination_lng, status)
-            VALUES ($1, $2, $3, $4, $5, $6, 'requested')
-            RETURNING id, rider_id, origin_lat, origin_lng, destination_lat, destination_lng, status, 
-                      driver_id, match_time, pickup_time, dropoff_time, created_at, updated_at
+            INSERT INTO rides (id, rider_id, origin_lat, origin_lng, destination_lat, destination_lng, status, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 'requested', $7, $7)
             "#
         )
-        .bind(ride_id)
+        .bind(request.ride_id)
         .bind(request.rider_id)
         .bind(request.origin_lat)
         .bind(request.origin_lng)
         .bind(request.destination_lat)
         .bind(request.destination_lng)
-        .fetch_one(&self.pool)
+        .bind(request.created_at)
+        .execute(&self.pool)
         .await?;
 
-        Ok(Ride {
-            id: row.0,
-            rider_id: row.1,
-            origin_lat: row.2,
-            origin_lng: row.3,
-            destination_lat: row.4,
-            destination_lng: row.5,
-            status: row.6,
-            driver_id: row.7,
-            match_time: row.8,
-            pickup_time: row.9,
-            dropoff_time: row.10,
-            created_at: row.11,
-            updated_at: row.12,
-        })
+        Ok(())
     }
 
     pub async fn get_ride_by_id(&self, ride_id: Uuid) -> Result<Option<Ride>, sqlx::Error> {

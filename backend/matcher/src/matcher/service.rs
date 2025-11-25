@@ -2,66 +2,59 @@
 // todo add more classes to this module, such as state, scoring, where more logic can go
 // todo: for now we are using in memory caches, but we can swap out with redis or similar later
 
+use redis::AsyncCommands;
 use std::{collections::HashMap, sync::Arc};
-
 use tokio::sync::RwLock;
 
-use crate::events::{producers::EventProducer, schema::RideRequested};
-
-// Basic driver state
-#[derive(Debug, Clone)]
-struct DriverState {
-    driver_id: String,
-    lat: f64,
-    lon: f64,
-    available: bool,
-}
-
-#[derive(Debug, Clone)]
-struct RiderState {
-    ride_id: String,
-    rider_id: String,
-    lat: f64,
-    lon: f64,
-    dest: (f64, f64),
-}
+use crate::events::{producers::EventProducer, schema::RideRequestedEvent};
+use crate::matcher::domain::{DriverState, RideRecord};
 
 /// Core Matcher service
 pub struct MatcherService {
+    // The MultiplexedConnection is already designed to be shared safely across tasks and threads (it implements Clone, Send, and Sync).
+    // but we wanted to wrap it in mutex for internal mutability when needed.
+    redis_client: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
     drivers: Arc<RwLock<HashMap<String, DriverState>>>,
-    riders: Arc<RwLock<HashMap<String, RiderState>>>,
+    riders: Arc<RwLock<HashMap<String, RideRecord>>>,
     producer: Arc<EventProducer>, // used to publish MatchProposed etc.
 }
 
 impl MatcherService {
-    pub fn new(producer: Arc<EventProducer>) -> Self {
+    pub fn new(
+        producer: Arc<EventProducer>,
+        redis_client: redis::aio::MultiplexedConnection,
+    ) -> Self {
         Self {
+            redis_client: Arc::new(tokio::sync::Mutex::new(redis_client)),
             drivers: Arc::new(RwLock::new(HashMap::new())),
             riders: Arc::new(RwLock::new(HashMap::new())),
             producer,
-            // todo optional: istead of callign producer directly, could send to a mpsc channel and have separate task do publishing, like
-            // evnet dispatcher, which then calls producer. Ill worry about it later
         }
     }
 
-    pub async fn handle_ride_requested(&self, event: RideRequested) {
-        // store rider state
-        let rider_state = RiderState {
-            ride_id: event.ride_id.clone(),
-            rider_id: event.rider_id.clone(),
-            dest: event.dest,
-            lat: event.origin.0,
-            lon: event.origin.1,
-        };
+    pub async fn handle_ride_requested(
+        &self,
+        event: RideRequestedEvent,
+    ) -> Result<(), anyhow::Error> {
+        let ride_record = RideRecord::from(event);
 
-        // Store rider temporarily
+        let key = format!("matcher:ride:{}", ride_record.ride_id);
+
+        let value = serde_json::to_string(&ride_record)?;
+
         {
-            let mut riders = self.riders.write().await;
-            riders.insert(rider_state.ride_id.clone(), rider_state.clone());
+            let mut redis = self.redis_client.lock().await;
+            redis.set::<_, _, ()>(&key, value).await?;
         }
 
-        // todo: so what do I do here? find nearby drivers? emit another event? score them, propose match
+        let stored: String = {
+            let mut redis = self.redis_client.lock().await;
+            redis.get::<_, String>(&key).await?
+        };
+        let ride_from_redis: RideRecord = serde_json::from_str(&stored)?;
 
-        println!("Received ride request in the matcher wow: {:?}", event);
+        println!("Ride read from Redis: {:?}", ride_from_redis);
+
+        Ok(())
     }
 }

@@ -1,7 +1,7 @@
 // gets called from consumer then delegates to matcher service
 // gets called from matcher then produces to producer
 
-use crate::{events::schema::RideRequested, matcher::service::MatcherService};
+use crate::{events::schema::RideRequestedEvent, matcher::service::MatcherService};
 
 // previously this was a concrete struct with methods for each event type before traits
 // pub struct EventHandler {
@@ -22,8 +22,11 @@ pub trait EventHandler<T> {
 }
 
 #[async_trait::async_trait]
-impl EventHandler<RideRequested> for MatcherService {
-    async fn handle(&self, evt: RideRequested) {
-        self.handle_ride_requested(evt).await;
+impl EventHandler<RideRequestedEvent> for MatcherService {
+    async fn handle(&self, evt: RideRequestedEvent) {
+        // Mapping from event to domain model is the responsibility of the service method handle_ride_requested, not the generic handler.
+        if let Err(e) = self.handle_ride_requested(evt).await {
+            eprintln!("Error handling RideRequestedEvent: {:?}", e);
+        }
     }
 }
