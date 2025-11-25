@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
-use ubersimx_messaging::{messagingclient::MessagingClient, Messaging, subjects::RIDER_REQUESTED_SUBJECT};
+use ubersimx_messaging::{
+    messagingclient::MessagingClient, subjects::RIDER_REQUESTED_SUBJECT, Messaging,
+};
 
 use crate::{
     events::{handler::EventHandler, schema::RideRequestedEvent},

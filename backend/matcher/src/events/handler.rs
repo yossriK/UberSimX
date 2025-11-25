@@ -25,6 +25,8 @@ pub trait EventHandler<T> {
 impl EventHandler<RideRequestedEvent> for MatcherService {
     async fn handle(&self, evt: RideRequestedEvent) {
         // Mapping from event to domain model is the responsibility of the service method handle_ride_requested, not the generic handler.
-        self.handle_ride_requested(evt).await;
+        if let Err(e) = self.handle_ride_requested(evt).await {
+            eprintln!("Error handling RideRequestedEvent: {:?}", e);
+        }
     }
 }

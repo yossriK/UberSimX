@@ -14,6 +14,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let messaging_url = env::var("MESSAGING_URL")
         .map_err(|e| anyhow::anyhow!("MESSAGING_URL must be set in .env: {}", e))?;
 
+    let redis_url = env::var("REDIS_URL")
+        .map_err(|e| anyhow::anyhow!("REDIS_URL must be set in .env: {}", e))?;
+
     // Connect to the messaging service
     // todo properly configure the URL via env var or config file and handle the error
     let messaging_client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
@@ -23,8 +26,16 @@ async fn main() -> Result<(), anyhow::Error> {
         messaging_client.clone(),
     ));
 
+    // todo: monitor for bottlenecks and benchmarks the service and use deadpool-redis if there is evidence of bottleneck with single connection
+    // setup Redis connection for state management
+    let client = redis::Client::open(redis_url)?;
+    let con = client.get_multiplexed_async_connection().await?;
+
     // setup the matcher service (business logic)
-    let matcher_service = Arc::new(matcher::service::MatcherService::new(producer.clone()));
+    let matcher_service = Arc::new(matcher::service::MatcherService::new(
+        producer.clone(),
+        con.clone(),
+    ));
 
     // setup the consumers (incoming events)
     let consumers = events::consumers::Consumers::new(messaging_client.clone());

@@ -13,7 +13,7 @@ pub struct DriverState {
 }
 
 /// Represents a ride record in the matcher domain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RideRecord {
     pub ride_id: Uuid,
     pub rider_id: Uuid,
@@ -26,7 +26,7 @@ pub struct RideRecord {
 }
 
 /// Status of a ride in the matcher domain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum RideStatus {
     Pending,
     Matched,

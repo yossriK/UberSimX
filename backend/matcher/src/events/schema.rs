@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 // defines all event types (RideRequested, DriverLocationUpdated, etc.)
 
 #[derive(Debug, Serialize, Deserialize)]
