@@ -5,10 +5,10 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
-use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
+use ubersimx_messaging::{messagingclient::MessagingClient, Messaging, subjects::RIDER_REQUESTED_SUBJECT};
 
 use crate::{
-    events::{handler::EventHandler, schema::RideRequested},
+    events::{handler::EventHandler, schema::RideRequestedEvent},
     matcher::service::MatcherService,
 };
 
@@ -50,7 +50,7 @@ impl Consumers {
 
     /// High-level helper: registers all event consumers for MatcherService
     pub async fn register_all(&self, matcher: Arc<MatcherService>) {
-        self.subscribe::<RideRequested, _>("rider.requested", matcher.clone())
+        self.subscribe::<RideRequestedEvent, _>(RIDER_REQUESTED_SUBJECT, matcher.clone())
             .await;
     }
 }

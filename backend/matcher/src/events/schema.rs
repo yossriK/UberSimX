@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 // defines all event types (RideRequested, DriverLocationUpdated, etc.)
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RideRequested {
+pub struct RideRequestedEvent {
     pub ride_id: Uuid,
     pub rider_id: Uuid,
     pub origin_lat: f64,
@@ -16,7 +16,7 @@ pub struct RideRequested {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MatchProposed {
+pub struct MatchProposedEvent {
     pub ride_id: String,
     pub driver_id: String,
     pub rider_id: String,

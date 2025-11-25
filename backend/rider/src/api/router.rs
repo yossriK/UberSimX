@@ -5,8 +5,7 @@ use axum::{routing::post, Json, Router};
 use chrono::Utc;
 use serde::Deserialize;
 use std::sync::Arc;
-use ubersimx_messaging::messagingclient::MessagingClient;
-use ubersimx_messaging::Messaging;
+use ubersimx_messaging::{messagingclient::MessagingClient, Messaging, subjects::RIDER_REQUESTED_SUBJECT};
 use uuid::Uuid;
 
 pub struct AppState {
@@ -45,6 +44,9 @@ async fn request_ride(
     state: axum::extract::State<Arc<AppState>>,
     Json(payload): Json<RequestRide>,
 ) -> Result<(), axum::http::StatusCode> {
+
+    // todo: validate rider exists
+
     let request = CreateRideRequest {
         ride_id: Uuid::new_v4(),
         rider_id: payload.rider_id,
@@ -67,7 +69,7 @@ async fn request_ride(
             let ride_request_data = serde_json::to_vec(&request).unwrap_or_default();
             if let Err(_) = state
                 .messaging_client
-                .publish(String::from("ride.requested"), ride_request_data)
+                .publish(RIDER_REQUESTED_SUBJECT.to_string(), ride_request_data)
                 .await
             {
                 // todo: proper clean up, like delete the db transaction or retry logic could be implemented here

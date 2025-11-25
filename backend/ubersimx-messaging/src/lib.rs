@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use std::pin::Pin;
 pub mod messagingclient;
+pub mod subjects;
 
 /// Application-level message type
 pub struct Message {
