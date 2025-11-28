@@ -40,7 +40,10 @@ async fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("MESSAGING_URL must be set in .env: {}", e))?;
 
     let server_address =
-        env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+        env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3001".to_string());
+
+    let redis_url = env::var("REDIS_URL")
+        .map_err(|e| anyhow::anyhow!("REDIS_URL must be set in .env: {}", e))?;
 
     // Create a connection pool
     let pool = Arc::new(
@@ -56,11 +59,16 @@ async fn main() -> Result<()> {
     // Connect to your messaging service
     let client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
 
+    // setup Redis connection for live state management (e.g., driver locations) vs PostgreSQL for persistent storage
+    let redis_client = redis::Client::open(redis_url)?;
+    let con = redis_client.get_multiplexed_async_connection().await?;
+
     // can also have factory function to create AppState that takes pool and creates repos inside
     let state = AppState {
         driver_repo,
         vehicle_repo,
         messaging_client: client.clone(),
+        redis_con: Arc::new(tokio::sync::Mutex::new(con)),
     };
     let app = create_router(state);
 

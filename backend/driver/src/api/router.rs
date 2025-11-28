@@ -9,11 +9,18 @@ use ubersimx_messaging::messagingclient::MessagingClient;
 use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
 
+// We use generics for the AppState struct here so that we can flexibly inject different implementations
+// of the DriverRepository and VehicleRepository traits. This is useful for testing (e.g., using mocks),
+// swapping out database backends, or customizing repository logic without changing the rest of the code.
+// In contrast, the rider AppState does not use generics—I'm experimenting with both approaches to see
+// which fits best for our needs.
 #[derive(Clone)]
 pub struct AppState<D, C> {
     pub driver_repo: Arc<D>,
     pub vehicle_repo: Arc<C>,
     pub messaging_client: Arc<MessagingClient>,
+    pub redis_con: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
+
 }
 
 pub fn create_router<D, C>(state: AppState<D, C>) -> Router
@@ -23,7 +30,11 @@ where
 {
     Router::new()
         // Driver routes
-        .route("/drivers", post(driver::create_driver))
+        .route("/api/v1/drivers", post(driver::create_driver))
+        .route(
+            "/api/v1/drivers/{driver_id}/location",
+            post(driver::update_driver_location::<D, C>),
+        )
         // .route("/drivers", get(driver::list_drivers::<D>))
         // .route("/drivers/:id", get(driver::get_driver::<D>))
         // Car routes

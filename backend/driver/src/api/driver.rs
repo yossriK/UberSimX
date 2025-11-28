@@ -1,3 +1,4 @@
+use redis::AsyncTypedCommands;
 use serde::Deserialize;
 use serde::Serialize;
 use ubersimx_messaging::messagingclient;
@@ -30,6 +31,12 @@ pub struct DriverResponse {
     pub car_id: Option<Uuid>,
 }
 
+#[derive(Deserialize)]
+pub struct DriverLocationUpdateRequest {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
 pub async fn create_driver<D, C>(
     State(state): State<AppState<D, C>>,
     Json(payload): Json<CreateDriverRequest>,
@@ -60,7 +67,7 @@ where
             "Ride started".as_bytes().to_vec(),
         )
         .await
-        .unwrap();
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(DriverResponse {
         id: driver.id,
@@ -101,3 +108,49 @@ pub async fn list_drivers<R: DriverRepository>(
         .collect();
     Ok(Json(resp))
 }
+
+pub async fn update_driver_location<D, C>(
+    State(state): State<AppState<D, C>>,
+    Path(driver_id): Path<Uuid>,
+    Json(payload): Json<DriverLocationUpdateRequest>,
+) -> Result<StatusCode, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: VehicleRepository + Send + Sync + Clone + 'static,
+{
+    // todo check if the driver exists before updating location
+
+    // Here you would typically update the driver's location in the database
+    // For simulation purposes, we'll just print it out
+
+    println!(
+        "Updating location for driver {}: lat={}, lon={}",
+        driver_id, payload.latitude, payload.longitude
+    );
+
+    // todo we have to differentiate between availeble and unavailable drivers
+    // For now, we just update the location in Redis
+       state.redis_con.lock().await.geo_add(
+        "drivers:locations",
+        (payload.longitude, payload.latitude, driver_id.to_string()),
+    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+
+        let pos: Option<Vec<Option<(f64, f64)>>> = state.redis_con.lock().await
+            .geo_pos("drivers:locations", &[driver_id.to_string()])
+            .await
+            .ok()
+            .map(|vec| {
+                vec.into_iter()
+                    .map(|opt_coord| opt_coord.map(|coord| (coord.longitude, coord.latitude)))
+                    .collect()
+            });
+
+        if let Some(Some((lon, lat))) = pos.and_then(|v| v.into_iter().next()) {
+            println!("Driver {} location updated to: lat={}, lon={}", driver_id, lat, lon);
+        } else {
+            println!("Failed to update location for driver {}: not found in Redis", driver_id);
+        }
+    Ok(StatusCode::OK)
+}
+
