@@ -6,8 +6,8 @@ use tokio::task;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
 use crate::{
-    api::router::{create_router, AppState},
-    repository::{driver_repository::PgDriverRepository, vehicle_repository::PgVehicleRepository},
+    api::router::{AppState, create_router},
+    repository::{driver_repository::PgDriverRepository, driver_status_repository::{self, PgDriverStatusRepository}, vehicle_repository::PgVehicleRepository},
 };
 
 mod models;
@@ -15,6 +15,7 @@ mod models;
 pub mod repository {
     pub mod driver_repository;
     pub mod vehicle_repository;
+    pub mod driver_status_repository;
     // DriverLocation usually not persisted in a database for high frequency updates. will be in memrory or cache
     // PostgreSQL + PostGIS extension OR Redis + Geo commands
 
@@ -40,7 +41,10 @@ async fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("MESSAGING_URL must be set in .env: {}", e))?;
 
     let server_address =
-        env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+        env::var("SERVER_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3001".to_string());
+
+    let redis_url = env::var("REDIS_URL")
+        .map_err(|e| anyhow::anyhow!("REDIS_URL must be set in .env: {}", e))?;
 
     // Create a connection pool
     let pool = Arc::new(
@@ -52,15 +56,21 @@ async fn main() -> Result<()> {
 
     let driver_repo = Arc::new(PgDriverRepository::new(pool.clone()));
     let vehicle_repo = Arc::new(PgVehicleRepository::new(pool.clone()));
+    let driver_status_repo = Arc::new(PgDriverStatusRepository::new(pool.clone()));
 
     // Connect to your messaging service
     let client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
 
+    // setup Redis connection for live state management (e.g., driver locations) vs PostgreSQL for persistent storage
+    let redis_client = redis::Client::open(redis_url)?;
+    let con = redis_client.get_multiplexed_async_connection().await?;
+
     // can also have factory function to create AppState that takes pool and creates repos inside
     let state = AppState {
         driver_repo,
-        vehicle_repo,
+        driver_status_repo,
         messaging_client: client.clone(),
+        redis_con: Arc::new(tokio::sync::Mutex::new(con)),
     };
     let app = create_router(state);
 
