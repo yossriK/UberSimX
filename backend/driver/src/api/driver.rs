@@ -15,6 +15,7 @@ use axum::{
 use crate::api::router::AppState;
 use crate::models::Driver;
 use crate::repository::driver_repository::DriverRepository;
+use crate::repository::driver_status_repository::DriverStatusRepository;
 use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
 
@@ -37,13 +38,30 @@ pub struct DriverLocationUpdateRequest {
     pub longitude: f64,
 }
 
+
+#[derive(Deserialize)]
+pub struct DriverStatusUpdateRequest {
+    pub driver_available: bool,
+}
+
+#[derive(Deserialize)]
+enum RideStatus {
+    None,
+    Assigned,
+    PickupArrived,
+    InProgress,
+    Completed,
+    Canceled,
+}
+
+
 pub async fn create_driver<D, C>(
     State(state): State<AppState<D, C>>,
     Json(payload): Json<CreateDriverRequest>,
 ) -> Result<Json<DriverResponse>, StatusCode>
 where
     D: DriverRepository + Send + Sync + Clone + 'static,
-    C: VehicleRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
 {
     let repo = state.driver_repo.clone();
 
@@ -59,7 +77,6 @@ where
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // for the fun of it let me hook the publisher and just publish for fun and see if itll be received.
     state
         .messaging_client
         .publish(
@@ -116,7 +133,7 @@ pub async fn update_driver_location<D, C>(
 ) -> Result<StatusCode, StatusCode>
 where
     D: DriverRepository + Send + Sync + Clone + 'static,
-    C: VehicleRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
 {
     // todo check if the driver exists before updating location
 
@@ -130,27 +147,81 @@ where
 
     // todo we have to differentiate between availeble and unavailable drivers
     // For now, we just update the location in Redis
-       state.redis_con.lock().await.geo_add(
-        "drivers:locations",
-        (payload.longitude, payload.latitude, driver_id.to_string()),
-    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .redis_con
+        .lock()
+        .await
+        .geo_add(
+            "drivers:locations",
+            (payload.longitude, payload.latitude, driver_id.to_string()),
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let pos: Option<Vec<Option<(f64, f64)>>> = state
+        .redis_con
+        .lock()
+        .await
+        .geo_pos("drivers:locations", &[driver_id.to_string()])
+        .await
+        .ok()
+        .map(|vec| {
+            vec.into_iter()
+                .map(|opt_coord| opt_coord.map(|coord| (coord.longitude, coord.latitude)))
+                .collect()
+        });
 
-        let pos: Option<Vec<Option<(f64, f64)>>> = state.redis_con.lock().await
-            .geo_pos("drivers:locations", &[driver_id.to_string()])
-            .await
-            .ok()
-            .map(|vec| {
-                vec.into_iter()
-                    .map(|opt_coord| opt_coord.map(|coord| (coord.longitude, coord.latitude)))
-                    .collect()
-            });
-
-        if let Some(Some((lon, lat))) = pos.and_then(|v| v.into_iter().next()) {
-            println!("Driver {} location updated to: lat={}, lon={}", driver_id, lat, lon);
-        } else {
-            println!("Failed to update location for driver {}: not found in Redis", driver_id);
-        }
+    if let Some(Some((lon, lat))) = pos.and_then(|v| v.into_iter().next()) {
+        println!(
+            "Driver {} location updated to: lat={}, lon={}",
+            driver_id, lat, lon
+        );
+    } else {
+        println!(
+            "Failed to update location for driver {}: not found in Redis",
+            driver_id
+        );
+    }
     Ok(StatusCode::OK)
 }
 
+pub async fn update_driver_status<D, C>(
+    State(state): State<AppState<D, C>>,
+    Path(driver_id): Path<Uuid>,
+    Json(payload): Json<DriverStatusUpdateRequest>,
+) -> Result<StatusCode, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
+{
+    // Try to patch (update) the status first
+    let patch_result = state
+        .driver_status_repo
+        .patch_status(
+            driver_id,
+            Some(payload.driver_available),
+            None,
+            None,
+        )
+        .await;
+
+    match patch_result {
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_) => {
+            // If update failed (e.g., no record), try to create
+            let new_status = crate::repository::driver_status_repository::DriverStatus {
+                driver_id,
+                driver_available: payload.driver_available,
+                ride_status: "none".to_string(),
+                current_trip_id: None,
+                status_updated_at: chrono::Utc::now(),
+            };
+            state
+                .driver_status_repo
+                .create_status(&new_status)
+                .await
+                .map(|_| StatusCode::CREATED)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}

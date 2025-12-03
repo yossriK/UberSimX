@@ -1,3 +1,38 @@
+# SQLx Migration Commands
+
+Here are the common commands you will use for managing database migrations with sqlx:
+
+1. **Create a new migration:**
+    ```bash
+    sqlx migrate add <migration_name>
+    ```
+    This creates a new migration file in the `migrations/` directory.
+
+2. **Apply all pending migrations:**
+    ```bash
+    sqlx migrate run --database-url
+    ```
+    This applies all new migrations to your database.
+
+3. **Revert the last migration:**
+    ```bash
+    sqlx migrate revert
+    ```
+    This undoes the most recent migration.
+
+4. **Check migration status:**
+    ```bash
+    sqlx migrate info
+    ```
+    This shows which migrations have been applied and which are pending.
+
+5. **Setup the database (if needed):**
+    ```bash
+    sqlx database setup
+    ```
+    This creates the database and runs all migrations (useful for new environments).
+
+**Note:** You must have the `DATABASE_URL` environment variable set for these commands to work.
 # Database Setup Guide (Postgres + SQLx)
 
 This project uses **Postgres** with **SQLx migrations** for database schema management.

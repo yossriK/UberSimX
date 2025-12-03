@@ -6,3 +6,24 @@ We also are not too strict on driver filters in terms of car type, luxury, pets 
 those details can come in later.
 
 also flags like is driver banned, blocked, cancelled too many rides and now on cooldown status, were not considered initially. 
+
+FULL EVENT FLOW (SIMPLE DIAGRAM)
+Driver App  
+   ↓  
+Driver Service  
+   ↓ location update  
+Redis GEOSET  
+   ↑ (read by matcher)
+Matcher Service  
+   ↓ publish RideAssignedEvent  
+Driver Service (consumes)
+   ↓ driver picks up  
+DriverPickedUpEvent  
+   ↓  
+Ride Service  
+   ↓ driver completes  
+DriverRideCompletedEvent  
+   ↓  
+Ride Service marks ride done  
+   ↓  
+Matcher consumes event ⇒ makes driver available again

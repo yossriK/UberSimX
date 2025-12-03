@@ -1,4 +1,5 @@
 use crate::api::driver;
+use crate::repository::driver_status_repository::DriverStatusRepository;
 use crate::repository::{driver_repository::DriverRepository, vehicle_repository};
 use axum::{
     routing::{get, post},
@@ -17,7 +18,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AppState<D, C> {
     pub driver_repo: Arc<D>,
-    pub vehicle_repo: Arc<C>,
+    pub driver_status_repo: Arc<C>,
     pub messaging_client: Arc<MessagingClient>,
     pub redis_con: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
 
@@ -26,7 +27,7 @@ pub struct AppState<D, C> {
 pub fn create_router<D, C>(state: AppState<D, C>) -> Router
 where
     D: DriverRepository + Send + Sync + Clone + 'static,
-    C: VehicleRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
 {
     Router::new()
         // Driver routes
@@ -34,6 +35,10 @@ where
         .route(
             "/api/v1/drivers/{driver_id}/location",
             post(driver::update_driver_location::<D, C>),
+        )
+         .route(
+            "/api/v1/drivers/{driver_id}/status",
+            post(driver::update_driver_status::<D, C>),
         )
         // .route("/drivers", get(driver::list_drivers::<D>))
         // .route("/drivers/:id", get(driver::get_driver::<D>))
