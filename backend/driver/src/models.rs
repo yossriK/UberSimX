@@ -28,10 +28,4 @@ pub struct DriverLocation {
     pub timestamp: chrono::NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct DriverAvailabilityChangedEvent {
-    pub driver_id: Uuid,
-    pub driver_available: bool,
-}
-
 // optional later: Add models for DriverScedule (if you want planned shifts for later), DriverEarnings, DriverPrerferences(max distance, max time, etc.)

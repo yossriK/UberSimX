@@ -1,13 +1,9 @@
 use crate::api::driver;
+use crate::repository::driver_repository::DriverRepository;
 use crate::repository::driver_status_repository::DriverStatusRepository;
-use crate::repository::{driver_repository::DriverRepository, vehicle_repository};
-use axum::{
-    routing::{get, post},
-    Router,
-};
-use common::ubersimx_messaging::messagingclient::MessagingClient;
+use axum::{routing::post, Router};
+use ubersimx_messaging::messagingclient::MessagingClient;
 
-use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
 
 // We use generics for the AppState struct here so that we can flexibly inject different implementations

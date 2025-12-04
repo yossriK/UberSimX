@@ -5,7 +5,7 @@ mod matcher;
 use std::{env, sync::Arc};
 
 use anyhow::Ok;
-use common::ubersimx_messaging::messagingclient::MessagingClient;
+use ubersimx_messaging::messagingclient::MessagingClient;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {

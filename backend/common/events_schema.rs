@@ -1,9 +1,12 @@
 // This file will hold all event schemas shared across the project.
 // Define your event structs and enums here.
 
-// Example event schema:
-// pub struct DriverStatusChangedEvent {
-//     pub driver_id: String,
-//     pub status: String,
-//     pub timestamp: i64,
-// }
+use serde::Serialize;
+use uuid::Uuid;
+
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DriverAvailabilityChangedEvent {
+    pub driver_id: Uuid,
+    pub driver_available: bool,
+}

@@ -1,11 +1,10 @@
+use common::events_schema::DriverAvailabilityChangedEvent;
+use common::subjects::DRIVER_AVAILABILITY_SUBJECT;
 use redis::AsyncTypedCommands;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json;
-use common::ubersimx_messaging::messagingclient;
-use common::ubersimx_messaging::messagingclient::MessagingClient;
-use common::subjects::DRIVER_AVAILABILITY_SUBJECT;
-use common::ubersimx_messaging::Messaging;
+use ubersimx_messaging::Messaging;
 use uuid::Uuid;
 
 use axum::{
@@ -16,11 +15,9 @@ use axum::{
 
 use crate::api::router::AppState;
 use crate::models::Driver;
-use crate::models::DriverAvailabilityChangedEvent;
 use crate::repository::driver_repository::DriverRepository;
 use crate::repository::driver_status_repository::DriverStatusRepository;
 use crate::repository::driver_status_repository::RideStatus;
-use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -181,7 +178,7 @@ where
 pub async fn update_driver_status<D, C>(
     State(state): State<AppState<D, C>>,
     Path(driver_id): Path<Uuid>,
-    Json(payload): Json<DriverStatusUpdateRequest>,
+    Json(driver_status_request): Json<DriverStatusUpdateRequest>,
 ) -> Result<StatusCode, StatusCode>
 where
     D: DriverRepository + Send + Sync + Clone + 'static,
@@ -190,17 +187,29 @@ where
     // Try to patch (update) the status first
     let patch_result = state
         .driver_status_repo
-        .patch_status(driver_id, Some(payload.driver_available), None, None)
+        .patch_status(
+            driver_id,
+            Some(driver_status_request.driver_available),
+            None,
+            None,
+        )
         .await;
+    let event = DriverAvailabilityChangedEvent {
+        driver_id: driver_id,
+        driver_available: driver_status_request.driver_available,
+    };
+
+    let payload = match serde_json::to_vec(&event) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to serialize DriverAvailabilityChangedEvent: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
     match patch_result {
         Ok(_) => {
             // Send NATS event for DriverAvailabilityChangedEvent
-            let event = DriverAvailabilityChangedEvent {
-                driver_id: driver_id, // or as needed for your system
-                driver_available: payload.driver_available,
-            };
-            let payload = serde_json::to_vec(&event).unwrap();
             if let Err(e) = state
                 .messaging_client
                 .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
@@ -214,17 +223,26 @@ where
             // If update failed (e.g., no record), try to create
             let new_status = crate::repository::driver_status_repository::DriverStatus {
                 driver_id,
-                driver_available: payload.driver_available,
+                driver_available: driver_status_request.driver_available,
                 ride_status: RideStatus::None,
                 current_trip_id: None,
                 status_updated_at: chrono::Utc::now(),
             };
-            state
+            let result = state
                 .driver_status_repo
                 .create_status(&new_status)
                 .await
                 .map(|_| StatusCode::CREATED)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+
+            if let Err(e) = state
+                .messaging_client
+                .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
+                .await
+            {
+                eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
+            }
+            result
         }
     }
 }

@@ -1,12 +1,12 @@
-use crate::models::{CreateRideRequest, CreateRiderRequest, Ride, Rider};
+use crate::models::{CreateRideRequest, CreateRiderRequest, Rider};
 use crate::repository::riders_repository::RidersRepository;
 use crate::repository::rides_repository::RidesRepository;
 use axum::{routing::post, Json, Router};
 use chrono::Utc;
+use common::subjects::RIDER_REQUESTED_SUBJECT;
 use serde::Deserialize;
 use std::sync::Arc;
-use common::ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
-use common::subjects::RIDER_REQUESTED_SUBJECT;
+use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 use uuid::Uuid;
 
 pub struct AppState {
@@ -45,7 +45,6 @@ async fn request_ride(
     state: axum::extract::State<Arc<AppState>>,
     Json(payload): Json<RequestRide>,
 ) -> Result<(), axum::http::StatusCode> {
-
     // todo: validate rider exists
 
     let request = CreateRideRequest {

@@ -138,7 +138,11 @@ impl DriverStatusRepository for PgDriverStatusRepository {
             return Ok(());
         }
 
-        let query = format!("UPDATE driver_status SET {} WHERE driver_id = ${}", sets.join(", "), param_index);
+        let query = format!(
+            "UPDATE driver_status SET {} WHERE driver_id = ${}",
+            sets.join(", "),
+            param_index
+        );
         let mut q = sqlx::query(&query);
 
         if let Some(val) = bind_driver_available {
