@@ -16,3 +16,4 @@ async-trait = "0.1.89"
 ubersimx-messaging = { path = "../ubersimx-messaging" }
 futures-util = "0.3.31"
 redis = { version = "0.32.7", features = ["geospatial", "tokio-comp"] }
+serde_json = "1.0.145"

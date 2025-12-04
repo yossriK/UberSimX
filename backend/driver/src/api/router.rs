@@ -21,7 +21,6 @@ pub struct AppState<D, C> {
     pub driver_status_repo: Arc<C>,
     pub messaging_client: Arc<MessagingClient>,
     pub redis_con: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
-
 }
 
 pub fn create_router<D, C>(state: AppState<D, C>) -> Router
@@ -36,7 +35,7 @@ where
             "/api/v1/drivers/{driver_id}/location",
             post(driver::update_driver_location::<D, C>),
         )
-         .route(
+        .route(
             "/api/v1/drivers/{driver_id}/status",
             post(driver::update_driver_status::<D, C>),
         )

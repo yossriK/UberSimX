@@ -6,10 +6,47 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
+pub enum RideStatus {
+    None,
+    Assigned,
+    PickupArrived,
+    InProgress,
+    Completed,
+    Canceled,
+}
+
+impl ToString for RideStatus {
+    fn to_string(&self) -> String {
+        match self {
+            RideStatus::None => "none",
+            RideStatus::Assigned => "assigned",
+            RideStatus::PickupArrived => "pickup_arrived",
+            RideStatus::InProgress => "in_progress",
+            RideStatus::Completed => "completed",
+            RideStatus::Canceled => "canceled",
+        }
+        .to_string()
+    }
+}
+
+impl RideStatus {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "assigned" => RideStatus::Assigned,
+            "pickup_arrived" => RideStatus::PickupArrived,
+            "in_progress" => RideStatus::InProgress,
+            "completed" => RideStatus::Completed,
+            "canceled" => RideStatus::Canceled,
+            _ => RideStatus::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DriverStatus {
     pub driver_id: Uuid,
     pub driver_available: bool,
-    pub ride_status: String,
+    pub ride_status: RideStatus,
     pub current_trip_id: Option<Uuid>,
     pub status_updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -18,7 +55,13 @@ pub struct DriverStatus {
 pub trait DriverStatusRepository {
     async fn create_status(&self, status: &DriverStatus) -> Result<(), Error>;
     async fn delete_status(&self, driver_id: Uuid) -> Result<(), Error>;
-    async fn patch_status(&self, driver_id: Uuid, availability_status: Option<bool>, ride_status: Option<String>, current_trip_id: Option<Option<Uuid>>) -> Result<(), Error>;
+    async fn patch_status(
+        &self,
+        driver_id: Uuid,
+        driver_available: Option<bool>,
+        ride_status: Option<RideStatus>,
+        current_trip_id: Option<Option<Uuid>>,
+    ) -> Result<(), Error>;
 }
 
 #[derive(Clone)]
@@ -37,11 +80,11 @@ impl DriverStatusRepository for PgDriverStatusRepository {
     async fn create_status(&self, status: &DriverStatus) -> Result<(), Error> {
         sqlx::query(
             "INSERT INTO driver_status (driver_id, driver_available, ride_status, current_trip_id)
-             VALUES ($1, $2, $3, $4)"
+             VALUES ($1, $2, $3, $4)",
         )
         .bind(status.driver_id)
         .bind(status.driver_available)
-        .bind(&status.ride_status)
+        .bind(status.ride_status.to_string())
         .bind(status.current_trip_id)
         .execute(self.pool.as_ref())
         .await?;
@@ -60,7 +103,7 @@ impl DriverStatusRepository for PgDriverStatusRepository {
         &self,
         driver_id: Uuid,
         driver_available: Option<bool>,
-        ride_status: Option<String>,
+        ride_status: Option<RideStatus>,
         current_trip_id: Option<Option<Uuid>>,
     ) -> Result<(), Error> {
         let mut sets = Vec::new();
@@ -102,7 +145,7 @@ impl DriverStatusRepository for PgDriverStatusRepository {
             q = q.bind(val);
         }
         if let Some(val) = bind_ride_status {
-            q = q.bind(val);
+            q = q.bind(val.to_string());
         }
         if let Some(val) = bind_current_trip_id {
             q = q.bind(val);
