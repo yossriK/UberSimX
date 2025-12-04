@@ -17,7 +17,7 @@ use sqlx::postgres::PgPoolOptions;
 use anyhow::Result;
 use std::{env, sync::Arc};
 use tokio::net::TcpListener;
-use ubersimx_messaging::messagingclient::MessagingClient;
+use common::ubersimx_messaging::messagingclient::MessagingClient;
 
 #[tokio::main]
 async fn main() -> Result<()> {

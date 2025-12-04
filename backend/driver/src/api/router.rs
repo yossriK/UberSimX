@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use ubersimx_messaging::messagingclient::MessagingClient;
+use common::ubersimx_messaging::messagingclient::MessagingClient;
 
 use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;

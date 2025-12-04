@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
-use ubersimx_messaging::{
+use common::ubersimx_messaging::{
     messagingclient::MessagingClient, subjects::RIDER_REQUESTED_SUBJECT, Messaging,
 };
 

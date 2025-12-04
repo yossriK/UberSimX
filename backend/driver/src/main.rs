@@ -3,7 +3,7 @@ use futures_util::stream::StreamExt;
 use sqlx::postgres::PgPoolOptions;
 use std::{env, sync::Arc};
 use tokio::task;
-use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
+use common::ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
 use crate::{
     api::router::{create_router, AppState},

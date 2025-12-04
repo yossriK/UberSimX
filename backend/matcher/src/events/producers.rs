@@ -1,7 +1,7 @@
 //  publishes outgoing events (MatchProposed, MatchConfirmed, etc)
 use serde::Serialize;
 use std::sync::Arc;
-use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
+use common::ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
 /// Event producer publishes domain events back to NATS
 #[derive(Clone)]

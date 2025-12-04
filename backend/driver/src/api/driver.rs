@@ -2,10 +2,10 @@ use redis::AsyncTypedCommands;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json;
-use ubersimx_messaging::messagingclient;
-use ubersimx_messaging::messagingclient::MessagingClient;
-use ubersimx_messaging::subjects::DRIVER_AVAILABILITY_SUBJECT;
-use ubersimx_messaging::Messaging;
+use common::ubersimx_messaging::messagingclient;
+use common::ubersimx_messaging::messagingclient::MessagingClient;
+use common::ubersimx_messaging::subjects::DRIVER_AVAILABILITY_SUBJECT;
+use common::ubersimx_messaging::Messaging;
 use uuid::Uuid;
 
 use axum::{
