@@ -24,7 +24,6 @@ impl PgVehicleRepository {
     }
 }
 
-
 impl VehicleRepository for PgVehicleRepository {
     fn create_vehicle(&self, _vehicle: Vehicle) -> Result<Vehicle, String> {
         todo!()

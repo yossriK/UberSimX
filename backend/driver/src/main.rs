@@ -6,16 +6,19 @@ use tokio::task;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
 use crate::{
-    api::router::{AppState, create_router},
-    repository::{driver_repository::PgDriverRepository, driver_status_repository::{self, PgDriverStatusRepository}, vehicle_repository::PgVehicleRepository},
+    api::router::{create_router, AppState},
+    repository::{
+        driver_repository::PgDriverRepository, driver_status_repository::PgDriverStatusRepository,
+        vehicle_repository::PgVehicleRepository,
+    },
 };
 
 mod models;
 // TODO: not supposed to use unwrap I know, but I was experimenting to get a skeleton mvp quick
 pub mod repository {
     pub mod driver_repository;
-    pub mod vehicle_repository;
     pub mod driver_status_repository;
+    pub mod vehicle_repository;
     // DriverLocation usually not persisted in a database for high frequency updates. will be in memrory or cache
     // PostgreSQL + PostGIS extension OR Redis + Geo commands
 

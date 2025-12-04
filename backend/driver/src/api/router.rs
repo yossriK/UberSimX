@@ -1,13 +1,9 @@
 use crate::api::driver;
+use crate::repository::driver_repository::DriverRepository;
 use crate::repository::driver_status_repository::DriverStatusRepository;
-use crate::repository::{driver_repository::DriverRepository, vehicle_repository};
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::{routing::post, Router};
 use ubersimx_messaging::messagingclient::MessagingClient;
 
-use crate::repository::vehicle_repository::VehicleRepository;
 use std::sync::Arc;
 
 // We use generics for the AppState struct here so that we can flexibly inject different implementations
@@ -21,7 +17,6 @@ pub struct AppState<D, C> {
     pub driver_status_repo: Arc<C>,
     pub messaging_client: Arc<MessagingClient>,
     pub redis_con: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
-
 }
 
 pub fn create_router<D, C>(state: AppState<D, C>) -> Router
@@ -36,7 +31,7 @@ where
             "/api/v1/drivers/{driver_id}/location",
             post(driver::update_driver_location::<D, C>),
         )
-         .route(
+        .route(
             "/api/v1/drivers/{driver_id}/status",
             post(driver::update_driver_status::<D, C>),
         )

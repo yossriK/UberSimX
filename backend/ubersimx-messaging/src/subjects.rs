@@ -1,1 +1,0 @@
-pub const RIDER_REQUESTED_SUBJECT: &str = "rider.requested";

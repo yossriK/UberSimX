@@ -1,8 +1,9 @@
+use common::events_schema::DriverAvailabilityChangedEvent;
+use common::subjects::DRIVER_AVAILABILITY_SUBJECT;
 use redis::AsyncTypedCommands;
 use serde::Deserialize;
 use serde::Serialize;
-use ubersimx_messaging::messagingclient;
-use ubersimx_messaging::messagingclient::MessagingClient;
+use serde_json;
 use ubersimx_messaging::Messaging;
 use uuid::Uuid;
 
@@ -16,7 +17,7 @@ use crate::api::router::AppState;
 use crate::models::Driver;
 use crate::repository::driver_repository::DriverRepository;
 use crate::repository::driver_status_repository::DriverStatusRepository;
-use crate::repository::vehicle_repository::VehicleRepository;
+use crate::repository::driver_status_repository::RideStatus;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -38,22 +39,10 @@ pub struct DriverLocationUpdateRequest {
     pub longitude: f64,
 }
 
-
 #[derive(Deserialize)]
 pub struct DriverStatusUpdateRequest {
     pub driver_available: bool,
 }
-
-#[derive(Deserialize)]
-enum RideStatus {
-    None,
-    Assigned,
-    PickupArrived,
-    InProgress,
-    Completed,
-    Canceled,
-}
-
 
 pub async fn create_driver<D, C>(
     State(state): State<AppState<D, C>>,
@@ -77,6 +66,7 @@ where
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // we should assume they they are available when they sign up
     state
         .messaging_client
         .publish(
@@ -188,7 +178,7 @@ where
 pub async fn update_driver_status<D, C>(
     State(state): State<AppState<D, C>>,
     Path(driver_id): Path<Uuid>,
-    Json(payload): Json<DriverStatusUpdateRequest>,
+    Json(driver_status_request): Json<DriverStatusUpdateRequest>,
 ) -> Result<StatusCode, StatusCode>
 where
     D: DriverRepository + Send + Sync + Clone + 'static,
@@ -199,29 +189,60 @@ where
         .driver_status_repo
         .patch_status(
             driver_id,
-            Some(payload.driver_available),
+            Some(driver_status_request.driver_available),
             None,
             None,
         )
         .await;
+    let event = DriverAvailabilityChangedEvent {
+        driver_id: driver_id,
+        driver_available: driver_status_request.driver_available,
+    };
+
+    let payload = match serde_json::to_vec(&event) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to serialize DriverAvailabilityChangedEvent: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
     match patch_result {
-        Ok(_) => Ok(StatusCode::OK),
+        Ok(_) => {
+            // Send NATS event for DriverAvailabilityChangedEvent
+            if let Err(e) = state
+                .messaging_client
+                .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
+                .await
+            {
+                eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
+            }
+            Ok(StatusCode::OK)
+        }
         Err(_) => {
             // If update failed (e.g., no record), try to create
             let new_status = crate::repository::driver_status_repository::DriverStatus {
                 driver_id,
-                driver_available: payload.driver_available,
-                ride_status: "none".to_string(),
+                driver_available: driver_status_request.driver_available,
+                ride_status: RideStatus::None,
                 current_trip_id: None,
                 status_updated_at: chrono::Utc::now(),
             };
-            state
+            let result = state
                 .driver_status_repo
                 .create_status(&new_status)
                 .await
                 .map(|_| StatusCode::CREATED)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+
+            if let Err(e) = state
+                .messaging_client
+                .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
+                .await
+            {
+                eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
+            }
+            result
         }
     }
 }

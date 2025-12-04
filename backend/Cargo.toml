@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "driver",
+    "matcher",
+    "rider",
+    "common",
+    "common/ubersimx-messaging"
+]
