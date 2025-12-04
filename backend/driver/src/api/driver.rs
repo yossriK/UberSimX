@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json;
 use common::ubersimx_messaging::messagingclient;
 use common::ubersimx_messaging::messagingclient::MessagingClient;
-use common::ubersimx_messaging::subjects::DRIVER_AVAILABILITY_SUBJECT;
+use common::subjects::DRIVER_AVAILABILITY_SUBJECT;
 use common::ubersimx_messaging::Messaging;
 use uuid::Uuid;
 

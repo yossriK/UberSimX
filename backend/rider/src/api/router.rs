@@ -5,7 +5,8 @@ use axum::{routing::post, Json, Router};
 use chrono::Utc;
 use serde::Deserialize;
 use std::sync::Arc;
-use common::ubersimx_messaging::{messagingclient::MessagingClient, Messaging, subjects::RIDER_REQUESTED_SUBJECT};
+use common::ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
+use common::subjects::RIDER_REQUESTED_SUBJECT;
 use uuid::Uuid;
 
 pub struct AppState {
