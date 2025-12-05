@@ -1,3 +1,11 @@
+# To view driver locations in Redis:
+```
+redis-cli GEOPOS drivers:locations <driver_id>
+```
+Replace `<driver_id>` with the actual driver ID.
+
+
+
 we have a simulation controller, not a real app calling the driver service, this will affect our design a little bit. 
 For example, there will be no need for a /accept endpoint where driver chooses to accept or reject a ride after
 a mathc been made, we will just assume that all rides are accepted after matcher service finds a match 
