@@ -9,7 +9,7 @@ Accepted
 The Matcher Service requires reliable delivery of events from:
 
 * **Rider Service** (`ride.requested`, `ride.cancelled`)
-* **Driver Service** (`driver.available`, `driver.location_updated`, `driver.busy`, `driver.offline`)
+* **Driver Service** (`driver.available`, `driver.location_updated`, `driver.offline`)
 
 Key requirements for event delivery:
 

@@ -1,4 +1,7 @@
 use common::events_schema::DriverAvailabilityChangedEvent;
+use common::redis_key_helpers::driver_metadata_namespace;
+use common::redis_namespaces::DRIVER_LAST_SEEN_KEY;
+use common::redis_namespaces::DRIVER_LOCATION_NAMESPACE;
 use common::subjects::DRIVER_AVAILABILITY_SUBJECT;
 use redis::AsyncTypedCommands;
 use serde::Deserialize;
@@ -66,16 +69,28 @@ where
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // we should assume they they are available when they sign up
-    state
-        .messaging_client
-        .publish(
-            String::from("driver.signup"),
-            "Ride started".as_bytes().to_vec(),
-        )
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let event = DriverAvailabilityChangedEvent {
+        driver_id: driver.id,
+        driver_available: true,
+    };
 
+    let payload = match serde_json::to_vec(&event) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to serialize DriverAvailabilityChangedEvent: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Send NATS event for DriverAvailabilityChangedEvent
+    if let Err(e) = state
+        .messaging_client
+        .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
+        .await
+    {
+        // should be sufficient to just print as long as the database creation was successful
+        eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
+    }
     Ok(Json(DriverResponse {
         id: driver.id,
         name: driver.name,
@@ -135,19 +150,32 @@ where
         driver_id, payload.latitude, payload.longitude
     );
 
-    // todo we have to differentiate between availeble and unavailable drivers
-    // For now, we just update the location in Redis
+    // Update location in Redis using GEOADD
     state
         .redis_con
         .lock()
         .await
         .geo_add(
-            "drivers:locations",
+            DRIVER_LOCATION_NAMESPACE,
             (payload.longitude, payload.latitude, driver_id.to_string()),
         )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+
+    // update the timestamp of the last location update
+    let timestamp = chrono::Utc::now().timestamp_millis();
+    
+    state.redis_con.lock().await.hset(
+        driver_metadata_namespace(driver_id),
+        DRIVER_LAST_SEEN_KEY,
+        timestamp,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+
+    // todo this code to be removed after testing
     let pos: Option<Vec<Option<(f64, f64)>>> = state
         .redis_con
         .lock()
