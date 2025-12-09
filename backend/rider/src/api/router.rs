@@ -1,9 +1,9 @@
-use crate::models::{CreateRiderRequest, Rider};
+use crate::models::{CreateRideRequest, CreateRiderRequest, Rider};
 use crate::repository::riders_repository::RidersRepository;
 use crate::repository::rides_repository::RidesRepository;
 use axum::{routing::post, Json, Router};
 use chrono::Utc;
-use common::events_schema::CreateRideRequest;
+use common::events_schema::RideRequestedEvent;
 use common::subjects::RIDE_REQUESTED_SUBJECT;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -46,9 +46,9 @@ async fn request_ride(
     state: axum::extract::State<Arc<AppState>>,
     Json(payload): Json<RequestRide>,
 ) -> Result<(), axum::http::StatusCode> {
-    // todo: validate rider exists
+    // todo: validate rider exists and isn't currently in a ride. I will worry about that later.
 
-    let request = CreateRideRequest {
+    let ride_request_event = RideRequestedEvent {
         ride_id: Uuid::new_v4(),
         rider_id: payload.rider_id,
         origin_lat: payload.origin_lat,
@@ -57,6 +57,15 @@ async fn request_ride(
         destination_lng: payload.destination_lng,
         created_at: Utc::now(),
     };
+    let ride_request = CreateRideRequest {
+        ride_id: ride_request_event.ride_id,
+        rider_id: ride_request_event.rider_id,
+        origin_lat: ride_request_event.origin_lat,
+        origin_lng: ride_request_event.origin_lng,
+        destination_lat: ride_request_event.destination_lat,
+        destination_lng: ride_request_event.destination_lng,
+        created_at: ride_request_event.created_at,
+    };
 
     // You should send the event after calling the repository, for these important reasons:
     // Data consistency - Only send events for rides that were successfully persisted to the database
@@ -64,19 +73,16 @@ async fn request_ride(
     // Event ordering - Events should reflect the actual state changes that occurred
     // Error handling - You can handle database errors without worrying about "orphaned" events
 
-    match state.rides_repo.create_ride(request.clone()).await {
+    match state.rides_repo.create_ride(ride_request).await {
         Ok(_) => {
             // 2. Then, send event (with the actual ride data including generated ID)
-            let ride_request_data = serde_json::to_vec(&request).unwrap_or_default();
+            let ride_request_data = serde_json::to_vec(&ride_request_event).unwrap_or_default();
             if let Err(_) = state
                 .messaging_client
                 .publish(RIDE_REQUESTED_SUBJECT.to_string(), ride_request_data)
                 .await
             {
                 // todo: proper clean up, like delete the db transaction or retry logic could be implemented here
-
-                // Log the error but don't fail the request since ride is already created
-
                 eprintln!("Failed to send ride requested event");
                 return Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
             }

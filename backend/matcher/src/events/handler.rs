@@ -1,7 +1,9 @@
 // gets called from consumer then delegates to matcher service
 // gets called from matcher then produces to producer
 
-use crate::{events::schema::RideRequestedEvent, matcher::service::MatcherService};
+use common::events_schema::RideRequestedEvent;
+
+use crate::matcher::service::MatcherService;
 
 // previously this was a concrete struct with methods for each event type before traits
 // pub struct EventHandler {

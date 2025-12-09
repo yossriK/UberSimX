@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
+use common::events_schema::RideRequestedEvent;
 use uuid::Uuid;
-
-use crate::events::schema::RideRequestedEvent;
 
 /// Represents the state of a driver in the system.
 #[derive(Debug, Clone)]
