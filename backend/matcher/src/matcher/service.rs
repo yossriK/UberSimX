@@ -2,25 +2,21 @@
 // todo add more classes to this module, such as state, scoring, where more logic can go
 // todo: for now we are using in memory caches, but we can swap out with redis or similar later
 
-use common::events_schema::{DriverAssignedEvent, RideRequestedEvent};
+use common::events_schema::{DriverAssignedEvent, NoDriversAvailableEvent, RideRequestedEvent};
 use common::redis_namespaces::DRIVER_LOCATION_NAMESPACE;
-use common::subjects::DRIVER_ASSIGNED_SUBJECT;
+use common::subjects::{DRIVER_ASSIGNED_SUBJECT, NO_DRIVERS_AVAILABLE_SUBJECT};
 use redis::geo::{RadiusOptions, RadiusOrder, RadiusSearchResult};
 use redis::{geo, AsyncCommands};
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::RwLock;
+use std::sync::Arc;
 use tokio::time::Instant;
 
 use crate::events::producers::EventProducer;
-use crate::matcher::domain::{DriverState, RideRecord};
 
 /// Core Matcher service
 pub struct MatcherService {
     // The MultiplexedConnection is already designed to be shared safely across tasks and threads (it implements Clone, Send, and Sync).
     // but we wanted to wrap it in mutex for internal mutability when needed.
     redis_client: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
-    drivers: Arc<RwLock<HashMap<String, DriverState>>>,
-    riders: Arc<RwLock<HashMap<String, RideRecord>>>,
     producer: Arc<EventProducer>, // used to publish MatchProposed etc.
 }
 
@@ -31,8 +27,6 @@ impl MatcherService {
     ) -> Self {
         Self {
             redis_client: Arc::new(tokio::sync::Mutex::new(redis_client)),
-            drivers: Arc::new(RwLock::new(HashMap::new())),
-            riders: Arc::new(RwLock::new(HashMap::new())),
             producer,
         }
     }
@@ -77,7 +71,7 @@ impl MatcherService {
                 driver_id: uuid::Uuid::parse_str(&driver.name)?,
                 pickup_lat: event.origin_lat,
                 pickup_lng: event.origin_lng,
-                assigned_at: chrono::Utc::now(),
+                assigned_at: event.created_at,
                 dropoff_lat: event.destination_lat,
                 dropoff_lng: event.destination_lng,
             };
@@ -99,6 +93,28 @@ impl MatcherService {
                 .await?;
         } else {
             // todo publish no available drivers for this request event so that rider can be notified
+
+            let no_driver_available_event = NoDriversAvailableEvent {
+                ride_id: event.ride_id,
+                rider_id: event.rider_id,
+                requested_at: event.created_at,
+                reason: Some("No available drivers in vicinity".to_string()),
+            };
+            let payload = match serde_json::to_vec(&no_driver_available_event) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("Failed to serialize NoDriversAvailableEvent: {}", e);
+                    return Err(anyhow::anyhow!(
+                        "Failed to serialize NoDriversAvailableEvent: {}",
+                        e
+                    ));
+                }
+            };
+
+            self.producer
+                .publish(NO_DRIVERS_AVAILABLE_SUBJECT, &payload)
+                .await?;
+
             eprintln!(
                 "No available drivers found for ride {} at location ({}, {})",
                 event.ride_id, event.origin_lat, event.origin_lng

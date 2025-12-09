@@ -8,10 +8,7 @@ use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
-use crate::{
-    events::{handler::EventHandler},
-    matcher::service::MatcherService,
-};
+use crate::{events::handler::EventHandler, matcher::service::MatcherService};
 
 pub struct Consumers {
     messaging_client: Arc<MessagingClient>,
