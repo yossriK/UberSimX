@@ -3,13 +3,13 @@
 
 use std::sync::Arc;
 
-use common::subjects::RIDE_REQUESTED_SUBJECT;
+use common::{events_schema::RideRequestedEvent, subjects::RIDE_REQUESTED_SUBJECT};
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
 use crate::{
-    events::{handler::EventHandler, schema::RideRequestedEvent},
+    events::{handler::EventHandler},
     matcher::service::MatcherService,
 };
 

@@ -13,7 +13,7 @@ pub struct DriverAvailabilityChangedEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CreateRideRequest {
+pub struct RideRequestedEvent {
     pub ride_id: Uuid,
     pub rider_id: Uuid,
     pub origin_lat: f64,
@@ -21,4 +21,15 @@ pub struct CreateRideRequest {
     pub destination_lat: f64,
     pub destination_lng: f64,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DriverAssignedEvent {
+    pub ride_id: Uuid,
+    pub driver_id: Uuid,
+    pub assigned_at: DateTime<Utc>,
+    pub pickup_lat: f64,
+    pub pickup_lng: f64,
+    pub dropoff_lat: f64,
+    pub dropoff_lng: f64,
 }
