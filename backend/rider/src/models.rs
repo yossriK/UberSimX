@@ -41,14 +41,3 @@ pub struct Ride {
 pub struct CreateRiderRequest {
     pub name: String,
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CreateRideRequest {
-    pub ride_id: Uuid,
-    pub rider_id: Uuid,
-    pub origin_lat: f64,
-    pub origin_lng: f64,
-    pub destination_lat: f64,
-    pub destination_lng: f64,
-    pub created_at: DateTime<Utc>,
-}

@@ -33,6 +33,10 @@ pub mod api {
     pub mod router;
 }
 
+mod service {
+    mod redis_cleanup;
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::from_filename("settings.env").ok();
