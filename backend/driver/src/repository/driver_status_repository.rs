@@ -5,51 +5,9 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
-pub enum RideStatus {
-    None,
-    Assigned,
-    PickupArrived,
-    InProgress,
-    Completed,
-    Canceled,
-}
+use crate::models::{DriverStatus, RideStatus};
 
-impl ToString for RideStatus {
-    fn to_string(&self) -> String {
-        match self {
-            RideStatus::None => "none",
-            RideStatus::Assigned => "assigned",
-            RideStatus::PickupArrived => "pickup_arrived",
-            RideStatus::InProgress => "in_progress",
-            RideStatus::Completed => "completed",
-            RideStatus::Canceled => "canceled",
-        }
-        .to_string()
-    }
-}
 
-impl RideStatus {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "assigned" => RideStatus::Assigned,
-            "pickup_arrived" => RideStatus::PickupArrived,
-            "in_progress" => RideStatus::InProgress,
-            "completed" => RideStatus::Completed,
-            "canceled" => RideStatus::Canceled,
-            _ => RideStatus::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct DriverStatus {
-    pub driver_id: Uuid,
-    pub driver_available: bool,
-    pub ride_status: RideStatus,
-    pub current_trip_id: Option<Uuid>,
-    pub status_updated_at: chrono::DateTime<chrono::Utc>,
-}
 
 #[async_trait]
 pub trait DriverStatusRepository {

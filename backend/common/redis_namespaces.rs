@@ -5,4 +5,7 @@
 pub const DRIVER_LOCATION_NAMESPACE: &str = "drivers:locations";
 
 // KEYS CONSTANTS
-pub const DRIVER_LAST_SEEN_KEY: &str = "last_seen";
+pub const DRIVER_LAST_LOCATION_UPDATE_FIELD: &str = "last_location_ts";
+pub const DRIVER_LAST_AVAILABILITY_UPDATE_FIELD: &str = "last_updated";
+pub const DRIVER_AVAILABILITY_FIELD: &str = "available";
+pub const DRIVER_AVAILABILITY_REASON_FIELD: &str = "reason";

@@ -1,6 +1,9 @@
 use common::events_schema::DriverAvailabilityChangedEvent;
-use common::redis_key_helpers::driver_metadata_namespace;
-use common::redis_namespaces::DRIVER_LAST_SEEN_KEY;
+use common::redis_key_helpers::driver_state_namespace;
+use common::redis_namespaces::DRIVER_AVAILABILITY_FIELD;
+use common::redis_namespaces::DRIVER_AVAILABILITY_REASON_FIELD;
+use common::redis_namespaces::DRIVER_LAST_AVAILABILITY_UPDATE_FIELD;
+use common::redis_namespaces::DRIVER_LAST_LOCATION_UPDATE_FIELD;
 use common::redis_namespaces::DRIVER_LOCATION_NAMESPACE;
 use common::subjects::DRIVER_AVAILABILITY_SUBJECT;
 use redis::AsyncTypedCommands;
@@ -17,10 +20,13 @@ use axum::{
 };
 
 use crate::api::router::AppState;
+use crate::models::AvailabilityReason;
 use crate::models::Driver;
+use crate::models::DriverRedisState;
+use crate::models::DriverStatus;
+use crate::models::RideStatus;
 use crate::repository::driver_repository::DriverRepository;
 use crate::repository::driver_status_repository::DriverStatusRepository;
-use crate::repository::driver_status_repository::RideStatus;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -150,59 +156,37 @@ where
         driver_id, payload.latitude, payload.longitude
     );
 
-    // Update location in Redis using GEOADD
-    state
-        .redis_con
-        .lock()
-        .await
+    // Set driver location and availability using a Redis pipeline (atomic MULTI/EXEC).
+    // This issues the commands in one network round trip and executes them
+    // inside MULTI/EXEC so they are applied atomically on the server.
+
+    let timestamp = chrono::Utc::now().timestamp_millis();
+
+    // Build pipeline
+    let mut pipe = redis::pipe();
+    pipe.atomic()
         .geo_add(
             DRIVER_LOCATION_NAMESPACE,
             (payload.longitude, payload.latitude, driver_id.to_string()),
         )
+        .ignore()
+        .hset(
+            driver_state_namespace(driver_id),
+            DRIVER_LAST_LOCATION_UPDATE_FIELD,
+            timestamp,
+        )
+        .expire(driver_state_namespace(driver_id), 90);
+
+    let mut con = state.redis_con.lock().await;
+    // Execute pipeline
+    pipe.query_async::<()>(&mut *con)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-
-    // update the timestamp of the last location update
-    let timestamp = chrono::Utc::now().timestamp_millis();
-    
-    state.redis_con.lock().await.hset(
-        driver_metadata_namespace(driver_id),
-        DRIVER_LAST_SEEN_KEY,
-        timestamp,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-
-    // todo this code to be removed after testing
-    let pos: Option<Vec<Option<(f64, f64)>>> = state
-        .redis_con
-        .lock()
-        .await
-        .geo_pos("drivers:locations", &[driver_id.to_string()])
-        .await
-        .ok()
-        .map(|vec| {
-            vec.into_iter()
-                .map(|opt_coord| opt_coord.map(|coord| (coord.longitude, coord.latitude)))
-                .collect()
-        });
-
-    if let Some(Some((lon, lat))) = pos.and_then(|v| v.into_iter().next()) {
-        println!(
-            "Driver {} location updated to: lat={}, lon={}",
-            driver_id, lat, lon
-        );
-    } else {
-        println!(
-            "Failed to update location for driver {}: not found in Redis",
-            driver_id
-        );
-    }
     Ok(StatusCode::OK)
 }
 
+// todo this needs cleanup as we got lots of nesting and repeated code
 pub async fn update_driver_status<D, C>(
     State(state): State<AppState<D, C>>,
     Path(driver_id): Path<Uuid>,
@@ -212,7 +196,105 @@ where
     D: DriverRepository + Send + Sync + Clone + 'static,
     C: DriverStatusRepository + Send + Sync + Clone + 'static,
 {
-    // Try to patch (update) the status first
+    // before updating here we need to check if the driver is in ride or not
+    // becuase the client app might send availability updates while in ride.
+    // We do assume that Redis at this point should be in sync with the database state
+    // In a real-world scenario, we might want to have more robust consistency checks.
+    // we are constantly updating redis as evnets in, and the cron job also keeps redis
+    // in a sync state.
+
+    let key = driver_state_namespace(driver_id);
+
+    let mut con = state.redis_con.lock().await;
+    let driver_state_map: std::collections::HashMap<String, String> = match con.hgetall(&key).await
+    {
+        Ok(map) => map,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    drop(con); // release the lock early as it will be reacquired later
+
+    // if there is no record in redis, that means the record was deleted, or expired due to inactivity
+    // which means driver is offline. In this case we can just patch the database directly to offline.
+    // if the driver is coming online we will also set the redis key again.
+    if driver_state_map.is_empty() {
+        // patch driver in the database directly if there is no redis key.
+        let patch_result = state
+            .driver_status_repo
+            .patch_status(
+                driver_id,
+                Some(driver_status_request.driver_available),
+                None,
+                None,
+            )
+            .await;
+        // Only write to Redis if the driver is coming online
+        if driver_status_request.driver_available {
+            let mut con = state.redis_con.lock().await;
+            let mut pipe = redis::pipe();
+            pipe.atomic()
+                .hset(&key, DRIVER_AVAILABILITY_FIELD, true)
+                .hset(
+                    &key,
+                    DRIVER_AVAILABILITY_REASON_FIELD,
+                    AvailabilityReason::Available.to_string(),
+                )
+                .hset(
+                    &key,
+                    DRIVER_LAST_AVAILABILITY_UPDATE_FIELD,
+                    chrono::Utc::now().timestamp(),
+                )
+                .expire(&key, 90);
+            pipe.query_async::<()>(&mut *con)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        match patch_result {
+            Ok(_) => {
+                return Ok(StatusCode::OK);
+            }
+            Err(_) => {
+                // If patching the driver status in the database fails, return an error.
+                // If update failed (e.g., no record), try to create
+                let new_status = DriverStatus {
+                    driver_id,
+                    driver_available: driver_status_request.driver_available,
+                    ride_status: RideStatus::None,
+                    current_trip_id: None,
+                    status_updated_at: chrono::Utc::now(),
+                };
+                let _ = state
+                    .driver_status_repo
+                    .create_status(&new_status)
+                    .await
+                    .map(|_| StatusCode::CREATED)
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+    }
+
+    // Convert String HashMap to JSON string
+    // I mean we could potentially assume that key doesn't exist and override it but I will not have extra error recover here just return errro
+    let json =
+        serde_json::to_string(&driver_state_map).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 2. Deserialize to struct
+    let redis_driver_state: DriverRedisState =
+        serde_json::from_str(&json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let availability =
+        crate::models::compute_availability(chrono::Utc::now().timestamp(), &redis_driver_state);
+
+    if !availability.available
+        && driver_status_request.driver_available
+        && availability.reason == crate::models::AvailabilityReason::InRide
+    {
+        // trying to set available when not allowed. if user was offline or stale location this means they are coming back online.
+        // but if they are in a ride we will not change their status atm
+        return Err(StatusCode::OK); // no-op but return OK
+    }
+
     let patch_result = state
         .driver_status_repo
         .patch_status(
@@ -222,34 +304,62 @@ where
             None,
         )
         .await;
-    let event = DriverAvailabilityChangedEvent {
-        driver_id: driver_id,
-        driver_available: driver_status_request.driver_available,
-    };
 
-    let payload = match serde_json::to_vec(&event) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to serialize DriverAvailabilityChangedEvent: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
+
+
+// there are no subscribers for this evnet but will keep the code for reference
+    /*  let event = DriverAvailabilityChangedEvent {
+            driver_id,
+            driver_available: driver_status_request.driver_available,
+        };
+
+        let payload = match serde_json::to_vec(&event) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Failed to serialize DriverAvailabilityChangedEvent: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+    */
+    let mut con = state.redis_con.lock().await;
+    let mut pipe = redis::pipe();
+    pipe.atomic()
+        .hset(&key, DRIVER_AVAILABILITY_FIELD, true)
+        .hset(
+            &key,
+            DRIVER_AVAILABILITY_REASON_FIELD,
+            if driver_status_request.driver_available {
+                AvailabilityReason::Available.to_string()
+            } else {
+                AvailabilityReason::OfflineToggle.to_string()
+            },
+        )
+        .hset(
+            &key,
+            DRIVER_LAST_AVAILABILITY_UPDATE_FIELD,
+            chrono::Utc::now().timestamp(),
+        )
+        .expire(&key, 90);
+    pipe.query_async::<()>(&mut *con)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match patch_result {
         Ok(_) => {
-            // Send NATS event for DriverAvailabilityChangedEvent
-            if let Err(e) = state
-                .messaging_client
-                .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
-                .await
-            {
-                eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
-            }
+            //todo: there is no more subscribers to this but will keep it just for reference Send NATS event for DriverAvailabilityChangedEvent
+            // if let Err(e) = state
+            //     .messaging_client
+            //     .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
+            //     .await
+            // {
+            //     eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
+            // }
+
             Ok(StatusCode::OK)
         }
         Err(_) => {
             // If update failed (e.g., no record), try to create
-            let new_status = crate::repository::driver_status_repository::DriverStatus {
+            let new_status = DriverStatus {
                 driver_id,
                 driver_available: driver_status_request.driver_available,
                 ride_status: RideStatus::None,
@@ -263,13 +373,13 @@ where
                 .map(|_| StatusCode::CREATED)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
 
-            if let Err(e) = state
-                .messaging_client
-                .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
-                .await
-            {
-                eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
-            }
+            // if let Err(e) = state
+            //     .messaging_client
+            //     .publish(DRIVER_AVAILABILITY_SUBJECT.to_string(), payload)
+            //     .await
+            // {
+            //     eprintln!("Failed to publish {DRIVER_AVAILABILITY_SUBJECT} : {}", e);
+            // }
             result
         }
     }

@@ -1,9 +1,10 @@
-use crate::models::{CreateRideRequest, CreateRiderRequest, Rider};
+use crate::models::{CreateRiderRequest, Rider};
 use crate::repository::riders_repository::RidersRepository;
 use crate::repository::rides_repository::RidesRepository;
 use axum::{routing::post, Json, Router};
 use chrono::Utc;
-use common::subjects::RIDER_REQUESTED_SUBJECT;
+use common::events_schema::CreateRideRequest;
+use common::subjects::RIDE_REQUESTED_SUBJECT;
 use serde::Deserialize;
 use std::sync::Arc;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
@@ -69,7 +70,7 @@ async fn request_ride(
             let ride_request_data = serde_json::to_vec(&request).unwrap_or_default();
             if let Err(_) = state
                 .messaging_client
-                .publish(RIDER_REQUESTED_SUBJECT.to_string(), ride_request_data)
+                .publish(RIDE_REQUESTED_SUBJECT.to_string(), ride_request_data)
                 .await
             {
                 // todo: proper clean up, like delete the db transaction or retry logic could be implemented here

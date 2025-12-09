@@ -2,7 +2,7 @@
 
 use uuid::Uuid;
 
-/// Returns the Redis namespace for driver metadata using the provided driver ID.
-pub fn driver_metadata_namespace(driver_id: Uuid) -> String {
-	format!("drivers:{}:metadata", driver_id)
+/// Returns the Redis namespace for driver state using the provided driver ID.
+pub fn driver_state_namespace(driver_id: Uuid) -> String {
+	format!("drivers:{}:state", driver_id)
 }

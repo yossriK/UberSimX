@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use common::subjects::RIDER_REQUESTED_SUBJECT;
+use common::subjects::RIDE_REQUESTED_SUBJECT;
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
@@ -51,7 +51,7 @@ impl Consumers {
 
     /// High-level helper: registers all event consumers for MatcherService
     pub async fn register_all(&self, matcher: Arc<MatcherService>) {
-        self.subscribe::<RideRequestedEvent, _>(RIDER_REQUESTED_SUBJECT, matcher.clone())
+        self.subscribe::<RideRequestedEvent, _>(RIDE_REQUESTED_SUBJECT, matcher.clone())
             .await;
     }
 }
