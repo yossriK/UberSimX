@@ -27,8 +27,9 @@ pub mod api {
 }
 
 mod service {
-    mod redis_cleanup;
-    pub(crate) mod ride_lifecycle;
+    pub mod redis_cleanup;
+    pub mod ride_lifecycle;
+    pub mod eta_service;
 }
 
 pub mod events {
@@ -98,6 +99,7 @@ async fn main() -> Result<()> {
         driver_status_repo,
         messaging_client: messaging_client.clone(),
         redis_con: Arc::new(tokio::sync::Mutex::new(con)),
+        ride_lifecycle_service: ride_lifecycle_service.clone(),
     };
     let app = create_router(state);
 

@@ -6,10 +6,7 @@
 
 use std::sync::Arc;
 
-use common::{
-    events_schema::DriverAssignedRideEvent,
-    subjects::{DRIVER_ASSIGNED_SUBJECT},
-};
+use common::{events_schema::DriverAssignedRideEvent, subjects::DRIVER_ASSIGNED_SUBJECT};
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};

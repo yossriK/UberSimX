@@ -1,6 +1,6 @@
-use crate::api::driver;
 use crate::infra::repository::driver_repository::DriverRepository;
 use crate::infra::repository::driver_status_repository::DriverStatusRepository;
+use crate::{api::driver, service::ride_lifecycle::RideLifeCycleService};
 use axum::{routing::post, Router};
 use ubersimx_messaging::messagingclient::MessagingClient;
 
@@ -17,6 +17,9 @@ pub struct AppState<D, C> {
     pub driver_status_repo: Arc<C>,
     pub messaging_client: Arc<MessagingClient>,
     pub redis_con: Arc<tokio::sync::Mutex<redis::aio::MultiplexedConnection>>,
+
+    // introdduce the usecase services then slowly move the business logic out of the handlers
+    pub ride_lifecycle_service: Arc<RideLifeCycleService>,
 }
 
 pub fn create_router<D, C>(state: AppState<D, C>) -> Router
@@ -34,6 +37,14 @@ where
         .route(
             "/api/v1/drivers/{driver_id}/status",
             post(driver::update_driver_status::<D, C>),
+        )
+        .route(
+            "/api/v1/drivers/{driver_id}/ride/accept",
+            post(driver::accept_ride_by_driver::<D, C>),
+        )
+        .route(
+            "/api/v1/drivers/{driver_id}/ride/reject",
+            post(driver::reject_ride_by_driver::<D, C>),
         )
         // .route("/drivers", get(driver::list_drivers::<D>))
         // .route("/drivers/:id", get(driver::get_driver::<D>))

@@ -27,6 +27,7 @@ use crate::models::Driver;
 use crate::models::DriverRedisState;
 use crate::models::DriverStatus;
 use crate::models::RideStatus;
+use crate::service::ride_lifecycle::RideLifeCycle;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -51,6 +52,11 @@ pub struct DriverLocationUpdateRequest {
 #[derive(Deserialize)]
 pub struct DriverStatusUpdateRequest {
     pub driver_available: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RideActionRequest {
+    pub ride_id: Uuid,
 }
 
 pub async fn create_driver<D, C>(
@@ -374,4 +380,40 @@ where
             result
         }
     }
+}
+
+// Handler for when a driver accepts a ride
+pub async fn accept_ride_by_driver<D, C>(
+    State(state): State<AppState<D, C>>,
+    Path(driver_id): Path<Uuid>,
+    Json(payload): Json<RideActionRequest>,
+) -> Result<StatusCode, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
+{
+
+    state.ride_lifecycle_service
+        .handle_driver_accept_ride_assignment(driver_id, payload.ride_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
+// Handler for when a driver rejects a ride
+pub async fn reject_ride_by_driver<D, C>(
+    State(state): State<AppState<D, C>>,
+    Path(driver_id): Path<Uuid>,
+    Json(payload): Json<RideActionRequest>,
+) -> Result<StatusCode, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
+{
+
+    state.ride_lifecycle_service
+        .handle_driver_reject_ride_assignment(driver_id, payload.ride_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
 }
