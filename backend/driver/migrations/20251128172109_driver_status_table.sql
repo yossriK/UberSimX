@@ -9,7 +9,7 @@ CREATE TABLE driver_status (
         ride_status IN (
             'none',            -- not on a trip
             'assigned',        -- trip matched + assigned
-            'in_ride',     -- passenger onboard
+            'in_ride',         -- passenger onboard
             'completed'        -- just finished a trip
         )
     ),

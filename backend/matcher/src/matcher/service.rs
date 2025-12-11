@@ -2,11 +2,12 @@
 // todo add more classes to this module, such as state, scoring, where more logic can go
 // todo: for now we are using in memory caches, but we can swap out with redis or similar later
 
-use common::events_schema::{DriverAssignedEvent, NoDriversAvailableEvent, RideRequestedEvent};
+use common::events_schema::{DriverAssignedRideEvent, NoDriversAvailableEvent, RideRequestedEvent};
 use common::redis_namespaces::DRIVER_LOCATION_NAMESPACE;
 use common::subjects::{DRIVER_ASSIGNED_SUBJECT, NO_DRIVERS_AVAILABLE_SUBJECT};
 use redis::geo::{RadiusOptions, RadiusOrder, RadiusSearchResult};
 use redis::{geo, AsyncCommands};
+use uuid::Uuid;
 use std::sync::Arc;
 use tokio::time::Instant;
 
@@ -66,9 +67,9 @@ impl MatcherService {
                 event.ride_id, driver.name, driver.dist
             );
 
-            let driver_assigned_event = DriverAssignedEvent {
+            let driver_assigned_event = DriverAssignedRideEvent {
                 ride_id: event.ride_id,
-                driver_id: uuid::Uuid::parse_str(&driver.name)?,
+                driver_id: driver.name.parse::<Uuid>()?,
                 pickup_lat: event.origin_lat,
                 pickup_lng: event.origin_lng,
                 assigned_at: event.created_at,
@@ -89,7 +90,7 @@ impl MatcherService {
             };
 
             self.producer
-                .publish(DRIVER_ASSIGNED_SUBJECT, &payload)
+                .publish(DRIVER_ASSIGNED_SUBJECT, payload)
                 .await?;
         } else {
             // todo publish no available drivers for this request event so that rider can be notified
@@ -112,7 +113,7 @@ impl MatcherService {
             };
 
             self.producer
-                .publish(NO_DRIVERS_AVAILABLE_SUBJECT, &payload)
+                .publish(NO_DRIVERS_AVAILABLE_SUBJECT, payload)
                 .await?;
 
             eprintln!(

@@ -20,13 +20,14 @@ use axum::{
 };
 
 use crate::api::router::AppState;
+use crate::infra::repository::driver_repository::DriverRepository;
+use crate::infra::repository::driver_status_repository::DriverStatusRepository;
 use crate::models::AvailabilityReason;
 use crate::models::Driver;
 use crate::models::DriverRedisState;
 use crate::models::DriverStatus;
 use crate::models::RideStatus;
-use crate::repository::driver_repository::DriverRepository;
-use crate::repository::driver_status_repository::DriverStatusRepository;
+use crate::service::ride_lifecycle::RideLifeCycle;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -51,6 +52,11 @@ pub struct DriverLocationUpdateRequest {
 #[derive(Deserialize)]
 pub struct DriverStatusUpdateRequest {
     pub driver_available: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RideActionRequest {
+    pub ride_id: Uuid,
 }
 
 pub async fn create_driver<D, C>(
@@ -148,14 +154,6 @@ where
 {
     // todo check if the driver exists before updating location
 
-    // Here you would typically update the driver's location in the database
-    // For simulation purposes, we'll just print it out
-
-    println!(
-        "Updating location for driver {}: lat={}, lon={}",
-        driver_id, payload.latitude, payload.longitude
-    );
-
     // Set driver location and availability using a Redis pipeline (atomic MULTI/EXEC).
     // This issues the commands in one network round trip and executes them
     // inside MULTI/EXEC so they are applied atomically on the server.
@@ -187,6 +185,7 @@ where
 }
 
 // todo this needs cleanup as we got lots of nesting and repeated code
+// it will be moved into the service layer
 pub async fn update_driver_status<D, C>(
     State(state): State<AppState<D, C>>,
     Path(driver_id): Path<Uuid>,
@@ -305,9 +304,7 @@ where
         )
         .await;
 
-
-
-// there are no subscribers for this evnet but will keep the code for reference
+    // there are no subscribers for this evnet but will keep the code for reference
     /*  let event = DriverAvailabilityChangedEvent {
             driver_id,
             driver_available: driver_status_request.driver_available,
@@ -383,4 +380,40 @@ where
             result
         }
     }
+}
+
+// Handler for when a driver accepts a ride
+pub async fn accept_ride_by_driver<D, C>(
+    State(state): State<AppState<D, C>>,
+    Path(driver_id): Path<Uuid>,
+    Json(payload): Json<RideActionRequest>,
+) -> Result<StatusCode, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
+{
+
+    state.ride_lifecycle_service
+        .handle_driver_accept_ride_assignment(driver_id, payload.ride_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
+// Handler for when a driver rejects a ride
+pub async fn reject_ride_by_driver<D, C>(
+    State(state): State<AppState<D, C>>,
+    Path(driver_id): Path<Uuid>,
+    Json(payload): Json<RideActionRequest>,
+) -> Result<StatusCode, StatusCode>
+where
+    D: DriverRepository + Send + Sync + Clone + 'static,
+    C: DriverStatusRepository + Send + Sync + Clone + 'static,
+{
+
+    state.ride_lifecycle_service
+        .handle_driver_reject_ride_assignment(driver_id, payload.ride_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
 }

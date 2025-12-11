@@ -53,7 +53,7 @@ async fn main() -> Result<()> {
 
     let listener = TcpListener::bind(&server_address).await.unwrap();
     println!("Server running on {}", server_address);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app).await.map_err(|_| anyhow::anyhow!("Axum Server error"))?;
 
     Ok(())
 }

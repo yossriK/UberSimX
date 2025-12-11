@@ -5,28 +5,21 @@ use std::{env, sync::Arc};
 use tokio::task;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
-use crate::{
-    api::router::{create_router, AppState},
-    repository::{
-        driver_repository::PgDriverRepository, driver_status_repository::PgDriverStatusRepository,
-        vehicle_repository::PgVehicleRepository,
-    },
-};
+use crate::api::router::{create_router, AppState};
+use crate::infra::repository::driver_repository::PgDriverRepository;
+use crate::infra::repository::driver_status_repository::PgDriverStatusRepository;
+use crate::infra::repository::vehicle_repository::PgVehicleRepository;
 
 mod models;
-// TODO: not supposed to use unwrap I know, but I was experimenting to get a skeleton mvp quick
-pub mod repository {
-    pub mod driver_repository;
-    pub mod driver_status_repository;
-    pub mod vehicle_repository;
-    // DriverLocation usually not persisted in a database for high frequency updates. will be in memrory or cache
-    // PostgreSQL + PostGIS extension OR Redis + Geo commands
-
-    // DriverAvailabilityEvent don't need to be stored in a database, they are transient messages, that exist as events
-    // in the messaging system
-
-    // DriverStatus could be peristed, but for simulation in memroy is fine.
+pub mod infra {
+    pub mod repository {
+        pub mod driver_repository;
+        pub mod driver_status_repository;
+        pub mod vehicle_repository;
+    }
 }
+// TODO: not supposed to use unwrap I know, but I was experimenting to get a skeleton mvp quick
+// repository modules moved to infra/repository
 
 pub mod api {
     pub mod driver;
@@ -34,7 +27,16 @@ pub mod api {
 }
 
 mod service {
-    mod redis_cleanup;
+    pub mod redis_cleanup;
+    pub mod ride_lifecycle;
+    pub mod eta_service;
+}
+
+pub mod events {
+    pub mod handlers;
+    pub mod publisher;
+    pub mod schemas;
+    pub mod subscribers;
 }
 
 #[tokio::main]
@@ -66,56 +68,47 @@ async fn main() -> Result<()> {
     let driver_status_repo = Arc::new(PgDriverStatusRepository::new(pool.clone()));
 
     // Connect to your messaging service
-    let client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
+    let messaging_client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
 
     // setup Redis connection for live state management (e.g., driver locations) vs PostgreSQL for persistent storage
     let redis_client = redis::Client::open(redis_url)?;
     let con = redis_client.get_multiplexed_async_connection().await?;
 
+    // setup the producer (for outgoing events)
+    let event_publisher = Arc::new(events::publisher::EventPublisher::new(
+        messaging_client.clone(),
+    ));
+
+    // Create Usecases
+    let ride_lifecycle_service = Arc::new(service::ride_lifecycle::RideLifeCycleService {
+        driver_status_repo: driver_status_repo.clone(),
+        producer: event_publisher.clone(),
+        redis_con: Arc::new(tokio::sync::Mutex::new(con.clone())),
+    });
+
+    // setup the consumers (incoming events)
+    let event_subscribers = events::subscribers::Subscribers::new(messaging_client.clone());
+    event_subscribers
+        .register_ride_evnets_consumers(ride_lifecycle_service.clone())
+        .await;
+
     // can also have factory function to create AppState that takes pool and creates repos inside
+    // todo clean up this to take usecases instead of infra repos directly
     let state = AppState {
         driver_repo,
         driver_status_repo,
-        messaging_client: client.clone(),
+        messaging_client: messaging_client.clone(),
         redis_con: Arc::new(tokio::sync::Mutex::new(con)),
+        ride_lifecycle_service: ride_lifecycle_service.clone(),
     };
     let app = create_router(state);
-
-    // Spawn a Tokio task to subscribe to "driver.signup"
-    let handle = task::spawn(async move {
-        let mut subscription = client
-            .subscribe(String::from("driver.signup"))
-            .await
-            .unwrap();
-        while let Some(msg) = subscription.next().await {
-            println!(
-                "Received: {:?}",
-                std::str::from_utf8(&msg.unwrap().data).unwrap()
-            );
-        }
-    });
 
     // Start server
     let listener = tokio::net::TcpListener::bind(&server_address).await?;
 
-    // Run both the server and message handler concurrently using tokio::select!
-    // This ensures both tasks run simultaneously and we can detect failures in either:
-    // - If the HTTP server crashes, we'll know about it
-    // - If the message subscription task panics, we'll catch it
-    // Without select!, axum::serve() would block forever and we'd never await the handle,
-    // causing silent failures in the message handler that we couldn't detect or recover from
-    tokio::select! {
-        result = axum::serve(listener, app) => {
-            if let Err(e) = result {
-                eprintln!("Server error: {}", e);
-            }
-        }
-        result = handle => {
-            if let Err(e) = result {
-                eprintln!("Message handler error: {}", e);
-            }
-        }
-    }
+    axum::serve(listener, app)
+        .await
+        .map_err(|_| anyhow::anyhow!("Axum Server error"))?;
 
     Ok(())
 }

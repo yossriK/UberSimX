@@ -5,11 +5,11 @@ use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
 /// Event producer publishes domain events back to NATS
 #[derive(Clone)]
-pub struct EventProducer {
+pub struct EventPublisher {
     nc: Arc<MessagingClient>,
 }
 
-impl EventProducer {
+impl EventPublisher {
     pub fn new(nc: Arc<MessagingClient>) -> Self {
         Self { nc }
     }

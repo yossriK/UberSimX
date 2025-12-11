@@ -1,4 +1,3 @@
-
 // This file will hold all event schemas shared across the project.
 // Define your event structs and enums here.
 
@@ -25,7 +24,7 @@ pub struct RideRequestedEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DriverAssignedEvent {
+pub struct DriverAssignedRideEvent {
     pub ride_id: Uuid,
     pub driver_id: Uuid,
     pub assigned_at: DateTime<Utc>,
@@ -41,4 +40,21 @@ pub struct NoDriversAvailableEvent {
     pub rider_id: Uuid,
     pub requested_at: DateTime<Utc>,
     pub reason: Option<String>, // e.g., "timeout", "all drivers busy", etc.
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DriverAcceptedRideEvent {
+    pub ride_id: Uuid,
+    pub driver_id: Uuid,
+    pub accepted_at: DateTime<Utc>,
+    pub estimated_pickup_time_minutes: u32,
+    // todo how are we showing the rider service how to get drivier locaton updates
+    // pub driver_location_lat: f64,
+    // pub driver_location_lng: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DriverRejectedRideEvent {
+    pub ride_id: Uuid,
+    pub driver_id: Uuid,
 }
