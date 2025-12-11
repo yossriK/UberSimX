@@ -67,28 +67,36 @@ async fn main() -> Result<()> {
     let driver_status_repo = Arc::new(PgDriverStatusRepository::new(pool.clone()));
 
     // Connect to your messaging service
-    let client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
+    let messaging_client = Arc::new(MessagingClient::connect(&messaging_url).await.unwrap());
 
     // setup Redis connection for live state management (e.g., driver locations) vs PostgreSQL for persistent storage
     let redis_client = redis::Client::open(redis_url)?;
     let con = redis_client.get_multiplexed_async_connection().await?;
 
+    // setup the producer (for outgoing events)
+    let event_publisher = Arc::new(events::publisher::EventPublisher::new(
+        messaging_client.clone(),
+    ));
+
     // Create Usecases
     let ride_lifecycle_service = Arc::new(service::ride_lifecycle::RideLifeCycleService {
         driver_status_repo: driver_status_repo.clone(),
+        producer: event_publisher.clone(),
+        redis_con: Arc::new(tokio::sync::Mutex::new(con.clone())),
     });
 
     // setup the consumers (incoming events)
-    let event_subscribers = events::subscribers::Subscribers::new(client.clone());
+    let event_subscribers = events::subscribers::Subscribers::new(messaging_client.clone());
     event_subscribers
         .register_ride_evnets_consumers(ride_lifecycle_service.clone())
         .await;
 
     // can also have factory function to create AppState that takes pool and creates repos inside
+    // todo clean up this to take usecases instead of infra repos directly
     let state = AppState {
         driver_repo,
         driver_status_repo,
-        messaging_client: client.clone(),
+        messaging_client: messaging_client.clone(),
         redis_con: Arc::new(tokio::sync::Mutex::new(con)),
     };
     let app = create_router(state);
@@ -96,7 +104,9 @@ async fn main() -> Result<()> {
     // Start server
     let listener = tokio::net::TcpListener::bind(&server_address).await?;
 
-    axum::serve(listener, app).await.map_err(|_| anyhow::anyhow!("Axum Server error"))?;
+    axum::serve(listener, app)
+        .await
+        .map_err(|_| anyhow::anyhow!("Axum Server error"))?;
 
     Ok(())
 }

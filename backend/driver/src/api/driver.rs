@@ -20,13 +20,13 @@ use axum::{
 };
 
 use crate::api::router::AppState;
+use crate::infra::repository::driver_repository::DriverRepository;
+use crate::infra::repository::driver_status_repository::DriverStatusRepository;
 use crate::models::AvailabilityReason;
 use crate::models::Driver;
 use crate::models::DriverRedisState;
 use crate::models::DriverStatus;
 use crate::models::RideStatus;
-use crate::infra::repository::driver_repository::DriverRepository;
-use crate::infra::repository::driver_status_repository::DriverStatusRepository;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -148,14 +148,6 @@ where
 {
     // todo check if the driver exists before updating location
 
-    // Here you would typically update the driver's location in the database
-    // For simulation purposes, we'll just print it out
-
-    println!(
-        "Updating location for driver {}: lat={}, lon={}",
-        driver_id, payload.latitude, payload.longitude
-    );
-
     // Set driver location and availability using a Redis pipeline (atomic MULTI/EXEC).
     // This issues the commands in one network round trip and executes them
     // inside MULTI/EXEC so they are applied atomically on the server.
@@ -187,6 +179,7 @@ where
 }
 
 // todo this needs cleanup as we got lots of nesting and repeated code
+// it will be moved into the service layer
 pub async fn update_driver_status<D, C>(
     State(state): State<AppState<D, C>>,
     Path(driver_id): Path<Uuid>,
@@ -305,9 +298,7 @@ where
         )
         .await;
 
-
-
-// there are no subscribers for this evnet but will keep the code for reference
+    // there are no subscribers for this evnet but will keep the code for reference
     /*  let event = DriverAvailabilityChangedEvent {
             driver_id,
             driver_available: driver_status_request.driver_available,

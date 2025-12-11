@@ -7,8 +7,6 @@ use uuid::Uuid;
 
 use crate::models::{DriverStatus, RideStatus};
 
-
-
 #[async_trait]
 pub trait DriverStatusRepository {
     async fn create_status(&self, status: &DriverStatus) -> Result<(), Error>;
@@ -18,7 +16,7 @@ pub trait DriverStatusRepository {
         driver_id: Uuid,
         driver_available: Option<bool>,
         ride_status: Option<RideStatus>,
-        current_trip_id: Option<Option<Uuid>>,
+        current_trip_id: Option<Uuid>,
     ) -> Result<(), Error>;
 }
 
@@ -62,7 +60,7 @@ impl DriverStatusRepository for PgDriverStatusRepository {
         driver_id: Uuid,
         driver_available: Option<bool>,
         ride_status: Option<RideStatus>,
-        current_trip_id: Option<Option<Uuid>>,
+        current_trip_id: Option<Uuid>,
     ) -> Result<(), Error> {
         let mut sets = Vec::new();
         let mut param_index = 1;
@@ -101,7 +99,20 @@ impl DriverStatusRepository for PgDriverStatusRepository {
             sets.join(", "),
             param_index
         );
-        // ...rest of the function...
-        todo!()
+        let mut q = sqlx::query(&query);
+
+        if let Some(val) = bind_driver_available {
+            q = q.bind(val);
+        }
+        if let Some(val) = bind_ride_status {
+            q = q.bind(val.to_string());
+        }
+        if let Some(val) = bind_current_trip_id {
+            q = q.bind(val);
+        }
+        q = q.bind(driver_id);
+
+        q.execute(self.pool.as_ref()).await?;
+        Ok(())
     }
 }

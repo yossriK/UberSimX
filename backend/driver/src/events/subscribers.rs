@@ -1,17 +1,20 @@
 // "subscribers": NATS subscriptions → stream incoming events
 // goal is to keep subscriptions/producers isolated from the rest of the app
-// these are not concrete implementation as we are usng messagingCLinet that wraps around NATS. 
+// these are not concrete implementation as we are usng messagingCLinet that wraps around NATS.
 // else we would have all the events logic placed under infrastructure. This module is application
 // orchestration not infra plumbing.
 
 use std::sync::Arc;
 
-use common::{events_schema::DriverAssignedRideEvent, subjects::{DRIVER_ASSIGNED_SUBJECT, RIDE_REQUESTED_SUBJECT}};
+use common::{
+    events_schema::DriverAssignedRideEvent,
+    subjects::{DRIVER_ASSIGNED_SUBJECT},
+};
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
-use crate::{events::handlers::EventHandler, service::ride_lifecycle::{RideLifeCycleService}};
+use crate::{events::handlers::EventHandler, service::ride_lifecycle::RideLifeCycleService};
 
 pub struct Subscribers {
     messaging_client: Arc<MessagingClient>,
@@ -42,8 +45,10 @@ impl Subscribers {
                 if let Ok(msg) = msg {
                     match serde_json::from_slice::<T>(&msg.data) {
                         Ok(evt) => handler.handle(evt).await,
-                        Err(e) => {eprintln!("Failed to parse event on {:?}: {:?}", &msg.data, e);
-                    todo!()},
+                        Err(e) => {
+                            eprintln!("Failed to parse event on {:?}: {:?}", &msg.data, e);
+                            todo!()
+                        }
                     }
                 }
             }

@@ -1,11 +1,10 @@
 // gets called from consumer then delegates to matcher service
 // gets called from matcher then produces to producer
 
-
-use common::events_schema::DriverAssignedRideEvent;
 use crate::events::schemas::DriverAssignedRideDto;
 use crate::service::ride_lifecycle::RideLifeCycle;
 use crate::service::ride_lifecycle::RideLifeCycleService;
+use common::events_schema::DriverAssignedRideEvent;
 
 #[async_trait::async_trait]
 pub trait EventHandler<T> {
