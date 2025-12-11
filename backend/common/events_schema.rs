@@ -25,7 +25,7 @@ pub struct RideRequestedEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DriverAssignedEvent {
+pub struct DriverAssignedRideEvent {
     pub ride_id: Uuid,
     pub driver_id: Uuid,
     pub assigned_at: DateTime<Utc>,

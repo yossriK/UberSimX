@@ -101,20 +101,7 @@ impl DriverStatusRepository for PgDriverStatusRepository {
             sets.join(", "),
             param_index
         );
-        let mut q = sqlx::query(&query);
-
-        if let Some(val) = bind_driver_available {
-            q = q.bind(val);
-        }
-        if let Some(val) = bind_ride_status {
-            q = q.bind(val.to_string());
-        }
-        if let Some(val) = bind_current_trip_id {
-            q = q.bind(val);
-        }
-        q = q.bind(driver_id);
-
-        q.execute(self.pool.as_ref()).await?;
-        Ok(())
+        // ...rest of the function...
+        todo!()
     }
 }

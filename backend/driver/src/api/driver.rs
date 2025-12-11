@@ -25,8 +25,8 @@ use crate::models::Driver;
 use crate::models::DriverRedisState;
 use crate::models::DriverStatus;
 use crate::models::RideStatus;
-use crate::repository::driver_repository::DriverRepository;
-use crate::repository::driver_status_repository::DriverStatusRepository;
+use crate::infra::repository::driver_repository::DriverRepository;
+use crate::infra::repository::driver_status_repository::DriverStatusRepository;
 use std::sync::Arc;
 
 #[derive(Deserialize)]

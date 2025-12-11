@@ -1,5 +1,5 @@
 //  publishes outgoing events (MatchProposed, MatchConfirmed, etc)
-use serde::Serialize;
+// technically this won't needed but I don't want hte services/business logic to depend on the messaging client directly
 use std::sync::Arc;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
@@ -15,9 +15,7 @@ impl EventProducer {
     }
 
     /// Generic publish helper
-    #[allow(dead_code)]
-    pub async fn publish<T: Serialize>(&self, subject: &str, evt: &T) -> anyhow::Result<()> {
-        let payload = serde_json::to_vec(evt).expect("failed to serialize event");
+    pub async fn publish(&self, subject: &str, payload: Vec<u8>) -> anyhow::Result<()> {
         self.nc.publish(String::from(subject), payload).await
     }
 }

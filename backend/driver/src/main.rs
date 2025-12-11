@@ -5,28 +5,21 @@ use std::{env, sync::Arc};
 use tokio::task;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
 
-use crate::{
-    api::router::{create_router, AppState},
-    repository::{
-        driver_repository::PgDriverRepository, driver_status_repository::PgDriverStatusRepository,
-        vehicle_repository::PgVehicleRepository,
-    },
-};
+use crate::api::router::{create_router, AppState};
+use crate::infra::repository::driver_repository::PgDriverRepository;
+use crate::infra::repository::driver_status_repository::PgDriverStatusRepository;
+use crate::infra::repository::vehicle_repository::PgVehicleRepository;
 
 mod models;
-// TODO: not supposed to use unwrap I know, but I was experimenting to get a skeleton mvp quick
-pub mod repository {
-    pub mod driver_repository;
-    pub mod driver_status_repository;
-    pub mod vehicle_repository;
-    // DriverLocation usually not persisted in a database for high frequency updates. will be in memrory or cache
-    // PostgreSQL + PostGIS extension OR Redis + Geo commands
-
-    // DriverAvailabilityEvent don't need to be stored in a database, they are transient messages, that exist as events
-    // in the messaging system
-
-    // DriverStatus could be peristed, but for simulation in memroy is fine.
+pub mod infra {
+    pub mod repository {
+        pub mod driver_repository;
+        pub mod driver_status_repository;
+        pub mod vehicle_repository;
+    }
 }
+// TODO: not supposed to use unwrap I know, but I was experimenting to get a skeleton mvp quick
+// repository modules moved to infra/repository
 
 pub mod api {
     pub mod driver;
@@ -35,6 +28,14 @@ pub mod api {
 
 mod service {
     mod redis_cleanup;
+    pub(crate) mod ride_lifecycle;
+}
+
+pub mod events {
+    pub mod handlers;
+    pub mod publisher;
+    pub mod schemas;
+    pub mod subscribers;
 }
 
 #[tokio::main]
@@ -71,6 +72,17 @@ async fn main() -> Result<()> {
     // setup Redis connection for live state management (e.g., driver locations) vs PostgreSQL for persistent storage
     let redis_client = redis::Client::open(redis_url)?;
     let con = redis_client.get_multiplexed_async_connection().await?;
+
+    // Create Usecases
+    let ride_lifecycle_service = Arc::new(service::ride_lifecycle::RideLifeCycleService {
+        driver_status_repo: driver_status_repo.clone(),
+    });
+
+    // setup the consumers (incoming events)
+    let event_subscribers = events::subscribers::Subscribers::new(client.clone());
+    event_subscribers
+        .register_ride_evnets_consumers(ride_lifecycle_service.clone())
+        .await;
 
     // can also have factory function to create AppState that takes pool and creates repos inside
     let state = AppState {

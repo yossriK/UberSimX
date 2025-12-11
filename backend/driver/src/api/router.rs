@@ -1,6 +1,6 @@
 use crate::api::driver;
-use crate::repository::driver_repository::DriverRepository;
-use crate::repository::driver_status_repository::DriverStatusRepository;
+use crate::infra::repository::driver_repository::DriverRepository;
+use crate::infra::repository::driver_status_repository::DriverStatusRepository;
 use axum::{routing::post, Router};
 use ubersimx_messaging::messagingclient::MessagingClient;
 
@@ -38,7 +38,7 @@ where
         // .route("/drivers", get(driver::list_drivers::<D>))
         // .route("/drivers/:id", get(driver::get_driver::<D>))
         // Car routes
-        // .route("/vehicles", post(vehicle_repository::create_vehicle::<D, C>))
+        // .route("/vehicles", post(crate::infra::repository::vehicle_repository::create_vehicle::<D, C>))
         // .route("/vehicles", get(car::list_vehicles::<D, C>))
         // .route("/vehicles/:id", get(car::get_car::<D, C>))
         // hook the state
