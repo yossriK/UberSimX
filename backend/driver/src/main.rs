@@ -1,6 +1,7 @@
 use anyhow::Result;
 use futures_util::stream::StreamExt;
 use sqlx::postgres::PgPoolOptions;
+use tokio::sync::Mutex;
 use std::{env, sync::Arc};
 use tokio::task;
 use ubersimx_messaging::{messagingclient::MessagingClient, Messaging};
@@ -9,6 +10,8 @@ use crate::api::router::{create_router, AppState};
 use crate::infra::repository::driver_repository::PgDriverRepository;
 use crate::infra::repository::driver_status_repository::PgDriverStatusRepository;
 use crate::infra::repository::vehicle_repository::PgVehicleRepository;
+use crate::infra::ws::hub::WsHub;
+use crate::service::location_update::{self, LocationUpdateService};
 
 mod models;
 pub mod infra {
@@ -17,6 +20,11 @@ pub mod infra {
         pub mod driver_status_repository;
         pub mod vehicle_repository;
     }
+
+    pub mod ws {
+        pub mod connections;
+        pub mod hub;
+    }
 }
 // TODO: not supposed to use unwrap I know, but I was experimenting to get a skeleton mvp quick
 // repository modules moved to infra/repository
@@ -24,12 +32,14 @@ pub mod infra {
 pub mod api {
     pub mod driver;
     pub mod router;
+    pub mod ws;
 }
 
 mod service {
     pub mod redis_cleanup;
     pub mod ride_lifecycle;
     pub mod eta_service;
+    pub mod location_update;
 }
 
 pub mod events {
@@ -83,9 +93,14 @@ async fn main() -> Result<()> {
     let ride_lifecycle_service = Arc::new(service::ride_lifecycle::RideLifeCycleService {
         driver_status_repo: driver_status_repo.clone(),
         producer: event_publisher.clone(),
-        redis_con: Arc::new(tokio::sync::Mutex::new(con.clone())),
+        redis_con: Arc::new(Mutex::new(con.clone())),
     });
 
+    let location_update_service = Arc::new(
+        LocationUpdateService {
+            redis_con: Arc::new(Mutex::new(con.clone())),
+        },
+    );
     // setup the consumers (incoming events)
     let event_subscribers = events::subscribers::Subscribers::new(messaging_client.clone());
     event_subscribers
@@ -94,12 +109,17 @@ async fn main() -> Result<()> {
 
     // can also have factory function to create AppState that takes pool and creates repos inside
     // todo clean up this to take usecases instead of infra repos directly
+    // Create the WebSocket hub and wrap it in Arc for sharing
+    let ws_hub = Arc::new(WsHub::new());
+
     let state = AppState {
         driver_repo,
         driver_status_repo,
         messaging_client: messaging_client.clone(),
         redis_con: Arc::new(tokio::sync::Mutex::new(con)),
         ride_lifecycle_service: ride_lifecycle_service.clone(),
+        location_update_service: location_update_service.clone(),
+        ws_hub: ws_hub.clone(),
     };
     let app = create_router(state);
 
